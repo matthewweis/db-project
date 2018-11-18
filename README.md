@@ -18,23 +18,23 @@ If you are familiar with Maven, just run "mvn install" and the front-end will wo
 If you are unfamiliar with Maven, I highly recommend opening the project with IntelliJ which comes with Maven bundled.
 
 ```
-( 1 ) Download IntelliJ at www.jetbrains.com/idea/download/
+Download IntelliJ at www.jetbrains.com/idea/download/
 ```
 
 ```
-( 2 ) Open IntelliJ and select "Check out from Version Control" > "Git"
+Open IntelliJ and select "Check out from Version Control" > "Git"
 ```
 
 ```
-( 3 ) In the pop-up window enter the URL "https://github.com/MatthewWeisCaps/db-project.git" (without quotes) or "git@github.com:MatthewWeisCaps/db-project.git" (without quotes)
+In the pop-up window enter the URL "https://github.com/MatthewWeisCaps/db-project.git" (without quotes) or "git@github.com:MatthewWeisCaps/db-project.git" (without quotes)
 ```
 
 ```
-( 3b) If IntelliJ asks if you would like to open the project, click "Yes"
+If IntelliJ asks if you would like to open the project, click "Yes"
 ```
 
 ```
-( 4 ) IntelliJ will detect that a Maven project has been opened and display a pop-up in the lower right-hand corner of the screen which reads "Maven projects need to be imported." On the pop-up, click either "Import Changes" or "Enable Auto-Import" (which option you select doesn't matter unless you plan on changing build files).
+IntelliJ will detect that a Maven project has been opened and display a pop-up in the lower right-hand corner of the screen which reads "Maven projects need to be imported." On the pop-up, click either "Import Changes" or "Enable Auto-Import" (which option you select doesn't matter unless you plan on changing build files).
 ```
 
 These instructions only apply to the project's frontend. The database is a seperate entity.
@@ -44,13 +44,12 @@ These instructions only apply to the project's frontend. The database is a seper
 Currently the project includes a couple of tests in logic/src/test:
 
 ```
-DBConnectionTest.java tests whether or not the application can connect to a given database. This tests also includes instructions for creating a lightweight Microsoft SQL DB in Docker, although using Microsoft SQL Management Studio / Azure works as well)
+DBConnectionTest.java tests whether or not the application can connect to a given database. This test also includes instructions for creating a lightweight Microsoft SQL DB in Docker, although using Microsoft SQL Management Studio / Azure works as well.
 ```
 
 ```
-DBQueryTest.java runs a few tests against a sample database to show rxjava2-jdbc is working. These tests are very similar to those from rxjava2-jdbc's README.md and are likely irrelevant to those setting up the project.
+DBQueryTest.java runs a few tests against a sample database to show rxjava2-jdbc is working. Included methods are very similar to those from rxjava2-jdbc's README.md and are likely irrelevant to those setting up the project.
 ```
-
 
 ## Built With
 
@@ -62,5 +61,5 @@ DBQueryTest.java runs a few tests against a sample database to show rxjava2-jdbc
 
 ## Authors
 
-* **Group 15** - *Created at K-State during Fall 2018 by Group 15 for CIS 560/562*
+* **Group 15** - *Created at K-State during Fall 2018 15 for CIS 560/562*
 
