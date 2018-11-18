@@ -61,5 +61,5 @@ DBQueryTest.java runs a few tests against a sample database to show rxjava2-jdbc
 
 ## Authors
 
-* **Group 15** - *Created at K-State during Fall 2018 15 for CIS 560/562*
+* **Group 15** - *Created at K-State during Fall 2018 for CIS 560/562*
 
