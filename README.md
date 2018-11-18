@@ -1,4 +1,4 @@
-# Project Title
+# Kansas Weather Map
 
 Weather map of Kansas counties which displays government data alongside supplemental data entered by users.
 
