@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import edu.dbgroup.gui.components.PropertyValueRow?>
+<?import javafx.collections.FXCollections?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.cell.PropertyValueFactory?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<VBox xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1" fx:controller="edu.dbgroup.gui.components.HomeView">
+   <children>
+      <BorderPane>
+         <center>
+             <fx:include source="kansas_map.fxml" fx:id="kansasMap"/>
+         </center>
+         <bottom>
+            <BorderPane BorderPane.alignment="BOTTOM_CENTER">
+               <center>
+                  <DatePicker fx:id="datePicker" BorderPane.alignment="CENTER" />
+               </center>
+               <top>
+                  <Label text="Select Date:" BorderPane.alignment="CENTER" />
+               </top>
+               <BorderPane.margin>
+                  <Insets top="40.0" />
+               </BorderPane.margin>
+            </BorderPane>
+         </bottom>
+         <right>
+            <TableView BorderPane.alignment="CENTER">
+              <columns>
+                <TableColumn text="Property" >
+                   <cellValueFactory>
+                      <PropertyValueFactory property="property"/>
+                   </cellValueFactory>
+                </TableColumn>
+                <TableColumn text="Value" prefWidth="200">
+                   <cellValueFactory>
+                      <PropertyValueFactory property="value"/>
+                   </cellValueFactory>
+                </TableColumn>
+              </columns>
+               <items>
+                  <FXCollections fx:factory="observableArrayList">
+                     <PropertyValueRow property="County" value="?" fx:id="countyPropertyValueRow" />
+                     <PropertyValueRow property="Date" value="?" fx:id="datePropertyValueRow" />
+                  </FXCollections>
+               </items>
+            </TableView>
+         </right>
+      </BorderPane>
+   </children>
+</VBox>

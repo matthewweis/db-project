@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>edu.dbgroup</groupId>
+    <artifactId>fxapp</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>logic</module>
+        <module>gui</module>
+    </modules>
+
+    <properties>
+        <!-- define language level as java 8 -->
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+
+        <!-- slf4j -->
+        <slf4j.groupId>org.slf4j</slf4j.groupId>
+        <slf4j.version>1.7.25</slf4j.version>
+
+        <!-- logback -->
+        <logback.groupId>ch.qos.logback</logback.groupId>
+        <logback.version>1.0.1</logback.version>
+    </properties>
+
+    <dependencies>
+        <!-- slf4j logging facade (GLOBAL) -->
+        <dependency>
+            <groupId>${slf4j.groupId}</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+
+        <!-- logback logging (GLOBAL) -->
+        <dependency>
+            <groupId>${logback.groupId}</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${logback.groupId}</groupId>
+            <artifactId>logback-core</artifactId>
+            <version>${logback.version}</version>
+        </dependency>
+
+        <!-- https://github.com/ReactiveX/RxJava (GLOBAL) -->
+        <dependency>
+            <groupId>io.reactivex.rxjava2</groupId>
+            <artifactId>rxjava</artifactId>
+            <version>2.2.2</version>
+        </dependency>
+
+        <!-- https://github.com/google/guava (GLOBAL) -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>27.0-jre</version>
+        </dependency>
+    </dependencies>
+</project>

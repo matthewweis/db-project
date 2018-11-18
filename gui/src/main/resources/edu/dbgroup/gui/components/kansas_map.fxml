@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.layout.VBox?>
+<VBox xmlns:fx="http://javafx.com/fxml" fx:controller="edu.dbgroup.gui.components.KansasMap">
+   <Canvas fx:id="canvas" width="660" height="343" onMouseMoved="#canvasMouseMoved" onMouseClicked="#canvasMouseClick"/>
+</VBox>
