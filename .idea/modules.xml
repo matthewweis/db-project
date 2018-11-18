@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/dbutils/dbutils.iml" filepath="$PROJECT_DIR$/dbutils/dbutils.iml" />
       <module fileurl="file://$PROJECT_DIR$/fxapp.iml" filepath="$PROJECT_DIR$/fxapp.iml" />
       <module fileurl="file://$PROJECT_DIR$/gui/gui.iml" filepath="$PROJECT_DIR$/gui/gui.iml" />
       <module fileurl="file://$PROJECT_DIR$/logic/logic.iml" filepath="$PROJECT_DIR$/logic/logic.iml" />

@@ -1,4 +1,4 @@
-package edu.dbgroup.gui.logic;
+package edu.dbgroup.logic;
 
 import org.davidmoten.rx.jdbc.ConnectionProvider;
 import org.davidmoten.rx.jdbc.Database;

@@ -1,4 +1,4 @@
-package edu.dbgroup.gui.logic;
+package edu.dbgroup.logic;
 
 import org.davidmoten.rx.jdbc.Database;
 import org.davidmoten.rx.jdbc.annotations.Column;
