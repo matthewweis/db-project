@@ -33,6 +33,15 @@
             <artifactId>mssql-jdbc</artifactId>
             <version>6.4.0.jre8</version>
         </dependency>
+
+        <!-- csv reader -->
+        <!-- https://mvnrepository.com/artifact/com.opencsv/opencsv -->
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>4.3</version>
+        </dependency>
+
     </dependencies>
 
 </project>
