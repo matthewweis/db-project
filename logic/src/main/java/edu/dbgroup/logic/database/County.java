@@ -7,8 +7,8 @@ public interface County {
     @Column("County_ID")
     Integer countyID();
 
-    @Column("Log_ID")
-    Integer logID();
+//    @Column("Log_ID")
+//    Integer logID();
 
     // this was listed in database diagram but may have been a mistake see CountyPhysioRegion table
 //    @Column("PhysioRegion_ID")

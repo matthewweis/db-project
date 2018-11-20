@@ -11,11 +11,6 @@
 
     <artifactId>gui</artifactId>
 
-    <properties>
-        <geotools.version>14.3</geotools.version>
-    </properties>
-
-
     <dependencies>
         <!-- local dependency on gui module -->
         <dependency>
@@ -53,11 +48,6 @@
         <!-- geotools -->
         <dependency>
             <groupId>org.geotools</groupId>
-            <artifactId>gt-shapefile</artifactId>
-            <version>${geotools.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.geotools</groupId>
             <artifactId>gt-swing</artifactId>
             <version>${geotools.version}</version>
         </dependency>
@@ -69,7 +59,6 @@
             <artifactId>fxgraphics2d</artifactId>
             <version>1.7</version>
         </dependency>
-
     </dependencies>
 
 

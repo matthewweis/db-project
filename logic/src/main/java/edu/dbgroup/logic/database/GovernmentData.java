@@ -18,8 +18,8 @@ public interface GovernmentData {
     @Column("Precipitation_ID")
     Integer precipitationID();
 
-//    @Column("WeatherType_ID") // may be incorrect in diagram, instead use GovernmentWeatherType table for 0..N link?
-//    Integer weatherTypeID();
+    @Column("WeatherType_ID") // may be incorrect in diagram, instead use GovernmentWeatherType table for 0..N link?
+    Integer weatherTypeID();
 
     @Column("CreatedOn")
     Timestamp createdOn();

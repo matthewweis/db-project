@@ -7,11 +7,14 @@ import com.vividsolutions.jts.geom.MultiLineString;
 import com.vividsolutions.jts.geom.MultiPolygon;
 import edu.dbgroup.logic.models.KansasMapModel;
 import edu.dbgroup.logic.models.ServiceProvider;
+import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import javafx.fxml.FXML;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.VBox;
+import org.checkerframework.checker.initialization.qual.Initialized;
+import org.checkerframework.checker.initialization.qual.UnknownInitialization;
 import org.geotools.data.FileDataStore;
 import org.geotools.data.FileDataStoreFinder;
 import org.geotools.data.simple.SimpleFeatureIterator;
@@ -41,13 +44,16 @@ import org.opengis.referencing.operation.TransformException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
 
 /**
- * Certian aspects of this class (espeically the coloring and picking) are adapted from a official geo-tools tutorial:
+ * Certain aspects of this class (especially the coloring and picking) are adapted from a official geo-tools tutorial:
  * http://docs.geotools.org/latest/userguide/tutorial/map/style.html
  *
  * See resource: /edu/dbgroup/gui/components/kansas_map.fxml
@@ -76,21 +82,40 @@ public class KansasMap extends VBox { // todo make disposable for map
     private static final float POINT_SIZE = 10.0f;
     // END
 
-    @FXML
-    private Canvas canvas;
+    @FXML private Canvas canvas;
 
-    private MapContent map;
-    private GTRenderer renderer;
-    private FXGraphics2D fxg2d;
-    private SimpleFeatureSource featureSource;
+    /**  see {@link #initialize()} */
+    @NonNull @Initialized private MapContent map;
 
-    private ReferencedEnvelope zoomedOutBounds;
+    /** spatial rendering abstraction over {@link FXGraphics2D}, see {@link #initialize()} */
+    @NonNull @Initialized private GTRenderer renderer;
+
+    /** graphics2d targeting javafx wrapper of swing map container see {@link #initialize()} */
+    @NonNull @Initialized private FXGraphics2D fxg2d;
+
+    /** container of map layers, see {@link #initialize()} */
+    @NonNull @Initialized private SimpleFeatureSource featureSource;
+
+    /** viewport transform for full-view, unmodified map view, see {@link #initialize()}, {@link #init()} */
+    @NonNull @Initialized private ReferencedEnvelope zoomedOutBounds;
+
+    /** holds last clicked county name, see {@link #setGeometry()} */
+    @Nullable @UnknownInitialization private String selectedGeomName = null;
+
+    /** holds last selected county geometry enum, see {@link GeomType}, {@link #setGeometry()} */
+    @Nullable @UnknownInitialization private GeomType selectedGeomType = null;
+
+    // reusable coord objects
+    private final Point2D localCoords = new Point2D.Double(0, 0);
+    //    private final Point2D worldCoords = new Point2D.Double(0, 0);
+    private final Rectangle clickRectBox = new Rectangle(0, 0, 0, 0);
 
     public KansasMap() { }
 
     @FXML
     private void initialize() {
         fxg2d = new FXGraphics2D(canvas.getGraphicsContext2D());
+
         try {
             final FileDataStore dataStore = FileDataStoreFinder.getDataStore(
                 this.getClass().getResource("/edu/dbgroup/gui/data/counties/tl_2018_us_county.shp")
@@ -100,6 +125,7 @@ public class KansasMap extends VBox { // todo make disposable for map
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
         map = new MapContent();
         renderer = new StreamingRenderer();
         init();
@@ -136,7 +162,7 @@ public class KansasMap extends VBox { // todo make disposable for map
         return new Rectangle(new Rectangle((int) canvas.getWidth(), (int) canvas.getHeight()));
     }
 
-    SimpleFeature lastSelectedFeature = null;
+    @Nullable private SimpleFeature lastSelectedFeature = null;
     private void attachEventHandlers() {
 
         final SimpleFeatureTypeBuilder b = new SimpleFeatureTypeBuilder();
@@ -188,13 +214,8 @@ public class KansasMap extends VBox { // todo make disposable for map
         return style;
     }
 
-
-    // reusable coord objects
-    private final Point2D localCoords = new Point2D.Double(0, 0);
-//    private final Point2D worldCoords = new Point2D.Double(0, 0);
-    private final Rectangle clickRectBox = new Rectangle(0, 0, 0, 0);
-
-    private @Nullable SimpleFeature clickIntersection(MouseEvent event) throws Exception {
+    @Nullable
+    private SimpleFeature clickIntersection(MouseEvent event) throws Exception {
 
         setGeometry();
         localCoords.setLocation(event.getX(), event.getY());
@@ -223,7 +244,7 @@ public class KansasMap extends VBox { // todo make disposable for map
         final FilterFactory2 ff = CommonFactoryFinder.getFilterFactory2();
 
         // Option 1 BBOX
-                Filter filter = ff.bbox(ff.property(geometryAttributeName), bbox);
+        final Filter filter = ff.bbox(ff.property(geometryAttributeName), bbox);
 
         // Option 2 Intersects
 //        Filter filter = ff.intersects(ff.property(geometryAttributeName), ff.literal(bbox));
@@ -243,7 +264,6 @@ public class KansasMap extends VBox { // todo make disposable for map
     }
 
     private Rule createRule(Color outlineColor, Color fillColor) {
-
         Symbolizer symbolizer = null;
         Fill fill = null;
         Stroke stroke = sf.createStroke(ff.literal(outlineColor), ff.literal(LINE_WIDTH));
@@ -278,6 +298,14 @@ public class KansasMap extends VBox { // todo make disposable for map
         return rule;
     }
 
+    private final float dtUntilComputationInMS = 0.2f;
+    private volatile float[] lastCatalogedComputationTime = new float[] { 0.0f };
+
+    final Timer mouseMovementComputationLimiter = new Timer(0, e -> {
+        if (lastCatalogedComputationTime[0] <= 0.0f) {
+        }
+    });
+
     @FXML
     private void canvasMouseMoved(MouseEvent event) {
         try {
@@ -298,11 +326,12 @@ public class KansasMap extends VBox { // todo make disposable for map
     @FXML
     private void canvasMouseClick(MouseEvent event) {
         try {
-            final SimpleFeature simpleFeature = clickIntersection(event);
 
+            final SimpleFeature simpleFeature = clickIntersection(event);
             final boolean clickedOnFeature = simpleFeature != null;
 
             map.getViewport().setMatchingAspectRatio(true);
+
             if (kansasMapModel.getIsZoomed()) { // zoom out
                 map.getViewport().setBounds(zoomedOutBounds);
                 kansasMapModel.isZoomedProperty().setValue(false);
@@ -314,10 +343,10 @@ public class KansasMap extends VBox { // todo make disposable for map
                 );
 
                 refEnv.expandBy(0.3);
-
                 map.getViewport().setBounds(refEnv);
                 kansasMapModel.isZoomedProperty().setValue(true);
             }
+
             draw(lastSelectedFeature);
 
             if (clickedOnFeature) {
@@ -331,8 +360,6 @@ public class KansasMap extends VBox { // todo make disposable for map
 
     }
 
-    @Nullable private String selectedGeomName = null;
-    @Nullable private GeomType selectedGeomType = null;
     /** Retrieve information about the feature geometry */
     private void setGeometry() {
         final GeometryDescriptor geomDesc = featureSource.getSchema().getGeometryDescriptor();
@@ -342,11 +369,8 @@ public class KansasMap extends VBox { // todo make disposable for map
 
         if (Polygon.class.isAssignableFrom(clazz) || MultiPolygon.class.isAssignableFrom(clazz)) {
             selectedGeomType = GeomType.POLYGON;
-
-        } else if (LineString.class.isAssignableFrom(clazz)
-                || MultiLineString.class.isAssignableFrom(clazz)) {
+        } else if (LineString.class.isAssignableFrom(clazz) || MultiLineString.class.isAssignableFrom(clazz)) {
             selectedGeomType = GeomType.LINE;
-
         } else {
             selectedGeomType = GeomType.POINT;
         }
