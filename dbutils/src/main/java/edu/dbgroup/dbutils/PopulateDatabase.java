@@ -4,12 +4,14 @@ import com.github.davidmoten.guavamini.Preconditions;
 import com.google.common.collect.Lists;
 import com.opencsv.CSVReader;
 import edu.dbgroup.logic.database.County;
+import io.reactivex.Completable;
 import io.reactivex.Flowable;
+import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
-import io.reactivex.flowables.GroupedFlowable;
+import io.reactivex.schedulers.Schedulers;
 import org.davidmoten.rx.jdbc.ConnectionProvider;
 import org.davidmoten.rx.jdbc.Database;
-import org.davidmoten.rx.jdbc.ReturnGeneratedKeysBuilder;
+import org.davidmoten.rx.jdbc.UpdateBuilder;
 import org.geotools.data.FileDataStore;
 import org.geotools.data.FileDataStoreFinder;
 import org.geotools.data.simple.SimpleFeatureCollection;
@@ -31,9 +33,9 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * A utility class which will automatically populate the weather app database with data.
@@ -52,9 +54,9 @@ public class PopulateDatabase {
     /*
      * Info for connecting to database. This may differ between databases.
      */
-    private static final String DATABASE_URL = "jdbc:sqlserver://localhost:1433;DatabaseName=TestDB";
-    private static final String DATABASE_USERNAME = "SA";
-    private static final String DATABASE_PASSWORD = "Group_15";
+    private static final String DATABASE_URL = "jdbc:sqlserver://localhost:1433;DatabaseName=TestDB;user=SA;password=Group_15";
+//    private static final String DATABASE_USERNAME = "SA";
+//    private static final String DATABASE_PASSWORD = "Group_15";
 
     /*
      * String to load driver for Microsoft sqlserver. This is only here as a contingency for legacy servers.
@@ -212,35 +214,129 @@ public class PopulateDatabase {
                     "\n" +
                     "CREATE INDEX [UK] ON  [User] ([Username]);";
 
-    public static void main(String[] args) throws SQLException, IOException {
-        dropTables();
-        createTables();
-        populateCountyTable();
-        populateLogTable(LocalDate.of(2018, 1, 1), LocalDate.of(2018, 7, 1));
-        populateGovernmentDataTable();
+    public static void main(String[] args) throws SQLException, IOException, InterruptedException {
+        try (final Database database = connectToDatabase()) {
+
+            final Completable dropTables =
+                    dropTables(null, database);
+
+            final Function<String, String> drop = tableName -> "DROP TABLE IF EXISTS " + tableName + ";";
+            final Completable last = manageTable(drop.apply("GovernmentData"), null, database);
+            final Completable next = manageTable(drop.apply("Precipitation"), last, database);
+
+            System.err.println("DONE!");
+
+//            final Completable tables =
+//                    createTables(dropTables, database);
+            //
+//            tables.blockingGet();
+//            System.exit(0);
+//
+//            final Completable populateCountyTable =
+//                    populateCountyTable(tables, database);
+//
+//            final Completable populateLogTable =
+//                    populateLogTable(LocalDate.of(2018, 1, 1), LocalDate.of(2018, 7, 1), populateCountyTable, database);
+//
+//            populateLogTable.subscribe();
+//
+//            final boolean[] done = new boolean[]{false};
+//            populateLogTable.doOnComplete(() -> done[0] = true);
+//
+//            while (!done[0]) {
+//                try {
+//                    Thread.sleep(250);
+//                } catch (InterruptedException e) {
+//                    e.printStackTrace();
+//                }
+//            }
+
+//           populateGovernmentDataTable();
+        }
     }
 
     private static Database connectToDatabase() throws SQLException {
-        final Connection connection = DriverManager.getConnection(DATABASE_URL, DATABASE_USERNAME, DATABASE_PASSWORD);
-        return Database.fromBlocking(ConnectionProvider.from(connection));
+//        final Connection connection = DriverManager.getConnection(DATABASE_URL, DATABASE_USERNAME, DATABASE_PASSWORD);
+//        return Database.fromBlocking(ConnectionProvider.from(connection));
+        return Database.from(DATABASE_URL, 8);
+
     }
 
-    private static void dropTables() throws SQLException {
-        dropTable("GovernmentData");
-        dropTable("Precipitation");
-        dropTable("Temperature");
-        dropTable("WeatherType");
-        dropTable("Log");
-        dropTable("County");
+    private static Completable dropTables(@Nullable Completable dependsOn, Database database) throws SQLException {
+
+        final Function<String, String> drop = tableName -> "DROP TABLE IF EXISTS " + tableName + ";";
+
+        final Completable dropGovernmentData = manageTable(drop.apply("GovernmentData"), dependsOn, database);
+
+        final Completable dropPrecipitation = manageTable(drop.apply("Precipitation"), dropGovernmentData, database);
+        final Completable dropTemperature = manageTable(drop.apply("Temperature"), dropGovernmentData, database);
+        final Completable dropWeatherType = manageTable(drop.apply("WeatherType"), dropGovernmentData, database);
+
+        final Completable guard = waitForAllTasksToComplete(dropPrecipitation, dropTemperature, dropWeatherType);
+
+        final Completable dropLog = manageTable(drop.apply("Log"), guard, database);
+
+        final Completable dropCounty = manageTable(drop.apply("County"), dropLog, database);
+
+        return dropCounty;
+
+//        dropTable("GovernmentData");
+//        dropTable("Precipitation");
+//        dropTable("Temperature");
+//        dropTable("WeatherType");
+//        dropTable("Log");
+//        dropTable("County");
     }
 
-    private static void createTables() throws SQLException {
-        createTable(CREATE_TABLE_COUNTY);
-        createTable(CREATE_TABLE_LOG);
-        createTable(CREATE_TABLE_PRECIPITATION);
-        createTable(CREATE_TABLE_TEMPERATURE);
-        createTable(CREATE_TABLE_WEATHER_TYPE);
-        createTable(CREATE_TABLE_GOVERNMENT_DATA);
+    private static Completable createTables(@Nullable Completable dependsOn, Database database) throws SQLException {
+        // stage 1
+        final Completable createCounty = manageTable(CREATE_TABLE_COUNTY, null, database);
+
+        // stage 2
+        final Completable createLog = manageTable(CREATE_TABLE_LOG, createCounty, database);
+
+        // stage 3
+        final Completable createPrecipitation = manageTable(CREATE_TABLE_PRECIPITATION, createLog, database);
+        final Completable createTemperature = manageTable(CREATE_TABLE_TEMPERATURE, createLog, database);
+        final Completable createWeatherType = manageTable(CREATE_TABLE_WEATHER_TYPE, createLog, database);
+        final Completable guard = waitForAllTasksToComplete(createPrecipitation, createTemperature, createWeatherType);
+
+        // stage 4
+        final Completable createGovernmentData = manageTable(CREATE_TABLE_GOVERNMENT_DATA, guard, database);
+
+        return createGovernmentData;
+
+
+//        final Completable createCounty = database.update(CREATE_TABLE_COUNTY).complete();
+//
+//        final Completable createLog =
+//                database.update(CREATE_TABLE_LOG).dependsOn(createCounty).complete();
+//
+//        final Completable createPrecipitation =
+//                database.update(CREATE_TABLE_PRECIPITATION).dependsOn(createLog).complete();
+//
+//        final Completable createTemperature =
+//                database.update(CREATE_TABLE_TEMPERATURE).dependsOn(createLog).complete();
+//
+//        final Completable createWeatherType =
+//                database.update(CREATE_TABLE_WEATHER_TYPE).dependsOn(createLog).complete();
+//
+//        final Completable emitWhenAllCompleted =
+//                Completable.merge(Lists.newArrayList(createPrecipitation, createTemperature, createWeatherType));
+//
+//        final Completable createGovernmentData =
+//                database.update(CREATE_TABLE_GOVERNMENT_DATA)
+//                        .dependsOn(emitWhenAllCompleted)
+//                        .complete();
+//
+//        return createGovernmentData;
+
+//        manageTable(CREATE_TABLE_COUNTY);
+//        manageTable(CREATE_TABLE_LOG);
+//        manageTable(CREATE_TABLE_PRECIPITATION);
+//        manageTable(CREATE_TABLE_TEMPERATURE);
+//        manageTable(CREATE_TABLE_WEATHER_TYPE);
+//        manageTable(CREATE_TABLE_GOVERNMENT_DATA);
     }
 
     private static void dropTable(String tableName) throws SQLException {
@@ -259,7 +355,29 @@ public class PopulateDatabase {
                 .blockingAwait();
     }
 
-    private static void populateCountyTable() throws SQLException, FileNotFoundException {
+    private static Completable waitForAllTasksToComplete(Completable ... tasks) {
+        return Completable.merge(Lists.newArrayList(tasks));
+    }
+
+    private static Completable manageTable(
+            @NonNull String command,
+            @Nullable Completable dependsOn,
+            @NonNull Database database) throws SQLException {
+
+        final UpdateBuilder update;
+
+        if (dependsOn != null) {
+            update = database.update(command).dependsOn(dependsOn);
+        } else {
+            update = database.update(command);
+        }
+
+        return update.complete().doOnError(Throwable::printStackTrace);
+    }
+
+    private static Completable populateCountyTable(@Nullable Completable dependsOn, Database database)
+            throws SQLException, FileNotFoundException {
+
         // create reader to iterate county and geocode information in ks-county-geocodes.csv
         final CSVReader csvReader = new CSVReader(
                 new FileReader(PopulateDatabase.class.getResource(
@@ -268,53 +386,60 @@ public class PopulateDatabase {
         );
 
         // send update command with reader's values, then block until this is done
-        connectToDatabase()
-                .update("INSERT INTO County(County_ID, Name) VALUES(?,?)")
-                .parameterListStream(Flowable.fromIterable(csvReader)
-                        .map(strings -> Arrays.asList(strings[0], strings[1])))
-                .complete()
-                .doOnError(Throwable::printStackTrace)
-                .blockingAwait();
+        final Completable task;
+
+        if (dependsOn != null) {
+            task = database
+                    .update("INSERT INTO County(County_ID, Name) VALUES(?,?)")
+                    .parameterListStream(Flowable.fromIterable(csvReader)
+                            .map(strings -> Arrays.asList(strings[0], strings[1])))
+                    .dependsOn(dependsOn)
+                    .complete();
+        } else {
+            task = database
+                    .update("INSERT INTO County(County_ID, Name) VALUES(?,?)")
+                    .parameterListStream(Flowable.fromIterable(csvReader)
+                            .map(strings -> Arrays.asList(strings[0], strings[1])))
+                    .complete();
+        }
+
+        return task.doOnError(Throwable::printStackTrace);
     }
 
-    private static void populateLogTable(LocalDate startDate, LocalDate endDateExclusive) throws SQLException {
+    private static Completable populateLogTable(@NonNull LocalDate startDate, @NonNull LocalDate endDateExclusive,
+                                         @Nullable Completable dependsOn, @NonNull Database database)
+            throws SQLException {
+
         // every day from startDate to endDate
         final Flowable<Date> dates =
                 Flowable.rangeLong(0L, ChronoUnit.DAYS.between(startDate, endDateExclusive))
                         .map(daysSince -> Date.valueOf(startDate.plusDays(daysSince)));
 
-        // every county in the County table
-//        final Flowable<County> counties =
-//        connectToDatabase()
-//                .select("SELECT County_ID, Name FROM County")
-//                .autoMap(County.class)
-//                .blockingSubscribe(county -> {
-//                    dates.blockingSubscribe(date -> {
-//                        connectToDatabase()
-//                                .update("INSERT INTO Log(County_ID, Date) VALUES(?, ?)")
-//                                .parameters(county.countyID(), date)
-//                                .complete()
-//                                .doOnError(Throwable::printStackTrace)
-//                                .blockingAwait();
-//                    });
-//                });
-
+        // every county in the county table
         final Flowable<County> counties =
-            connectToDatabase()
+            database
                 .select("SELECT County_ID, Name FROM County")
                 .autoMap(County.class);
 
-        // all possible pairs between the above dates and counties
+        // all possible pairs between dates and counties
         final Flowable<List<?>> cartesianProduct =
                 counties.flatMap(county -> dates.map(date -> Lists.newArrayList(county.countyID(), date)));
 
         // insert all pairs as rows into Log table
-        connectToDatabase()
-                .update("INSERT INTO Log(County_ID, Date) VALUES(?, ?)")
-                .parameterListStream(cartesianProduct)
-                .complete()
-                .doOnError(Throwable::printStackTrace)
-                .blockingAwait();
+        final Completable task;
+
+        if (dependsOn != null) {
+            task = database.update("INSERT INTO Log(County_ID, Date) VALUES(?, ?)")
+                    .parameterListStream(cartesianProduct)
+                    .dependsOn(dependsOn)
+                    .complete();
+        } else {
+            task = database.update("INSERT INTO Log(County_ID, Date) VALUES(?, ?)")
+                    .parameterListStream(cartesianProduct)
+                    .complete();
+        }
+
+        return task.doOnError(Throwable::printStackTrace);
     }
 
     private static void populateGovernmentDataTable() throws SQLException, IOException {
