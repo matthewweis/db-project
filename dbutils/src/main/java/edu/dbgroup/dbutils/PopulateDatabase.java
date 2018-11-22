@@ -2,24 +2,29 @@ package edu.dbgroup.dbutils;
 
 import com.github.davidmoten.guavamini.Preconditions;
 import com.google.common.collect.Lists;
-import com.opencsv.CSVReader;
+import com.opencsv.*;
+import com.vividsolutions.jts.geom.*;
+import com.vividsolutions.jts.geom.util.GeometryTransformer;
 import edu.dbgroup.logic.database.County;
-import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
-import io.reactivex.schedulers.Schedulers;
-import org.davidmoten.rx.jdbc.ConnectionProvider;
+import io.reactivex.flowables.GroupedFlowable;
 import org.davidmoten.rx.jdbc.Database;
 import org.davidmoten.rx.jdbc.UpdateBuilder;
+import org.davidmoten.rx.jdbc.tuple.Tuple2;
 import org.geotools.data.FileDataStore;
 import org.geotools.data.FileDataStoreFinder;
+import org.geotools.data.collection.SpatialIndexFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureCollection;
+import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.factory.CommonFactoryFinder;
-import org.locationtech.jts.geom.Coordinate;
+import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
+import org.opengis.feature.type.Name;
 import org.opengis.filter.Filter;
 import org.opengis.filter.FilterFactory2;
+import org.opengis.filter.expression.Expression;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,15 +32,13 @@ import org.slf4j.LoggerFactory;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.Date;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
-import java.util.function.Function;
 
 /**
  * A utility class which will automatically populate the weather app database with data.
@@ -215,199 +218,82 @@ public class PopulateDatabase {
                     "CREATE INDEX [UK] ON  [User] ([Username]);";
 
     public static void main(String[] args) throws SQLException, IOException, InterruptedException {
+        // todo: close connectToDatabase() calls to avoid leaks
         try (final Database database = connectToDatabase()) {
-
-            final Completable dropTables =
-                    dropTables(null, database);
-
-            final Function<String, String> drop = tableName -> "DROP TABLE IF EXISTS " + tableName + ";";
-            final Completable last = manageTable(drop.apply("GovernmentData"), null, database);
-            final Completable next = manageTable(drop.apply("Precipitation"), last, database);
-
-            System.err.println("DONE!");
-
-//            final Completable tables =
-//                    createTables(dropTables, database);
-            //
-//            tables.blockingGet();
-//            System.exit(0);
-//
-//            final Completable populateCountyTable =
-//                    populateCountyTable(tables, database);
-//
-//            final Completable populateLogTable =
-//                    populateLogTable(LocalDate.of(2018, 1, 1), LocalDate.of(2018, 7, 1), populateCountyTable, database);
-//
-//            populateLogTable.subscribe();
-//
-//            final boolean[] done = new boolean[]{false};
-//            populateLogTable.doOnComplete(() -> done[0] = true);
-//
-//            while (!done[0]) {
-//                try {
-//                    Thread.sleep(250);
-//                } catch (InterruptedException e) {
-//                    e.printStackTrace();
-//                }
-//            }
-
-//           populateGovernmentDataTable();
+            dropTables();
+            createTables();
+            populateCountyTable(connectToDatabase());
+            populateLogTable(LocalDate.of(2018, 1, 1), LocalDate.of(2018, 7, 1), connectToDatabase());
+            populateGovernmentDataTable(connectToDatabase());
         }
     }
+
+
 
     private static Database connectToDatabase() throws SQLException {
 //        final Connection connection = DriverManager.getConnection(DATABASE_URL, DATABASE_USERNAME, DATABASE_PASSWORD);
 //        return Database.fromBlocking(ConnectionProvider.from(connection));
-        return Database.from(DATABASE_URL, 8);
+        return Database.from(DATABASE_URL, 1);
 
     }
 
-    private static Completable dropTables(@Nullable Completable dependsOn, Database database) throws SQLException {
-
-        final Function<String, String> drop = tableName -> "DROP TABLE IF EXISTS " + tableName + ";";
-
-        final Completable dropGovernmentData = manageTable(drop.apply("GovernmentData"), dependsOn, database);
-
-        final Completable dropPrecipitation = manageTable(drop.apply("Precipitation"), dropGovernmentData, database);
-        final Completable dropTemperature = manageTable(drop.apply("Temperature"), dropGovernmentData, database);
-        final Completable dropWeatherType = manageTable(drop.apply("WeatherType"), dropGovernmentData, database);
-
-        final Completable guard = waitForAllTasksToComplete(dropPrecipitation, dropTemperature, dropWeatherType);
-
-        final Completable dropLog = manageTable(drop.apply("Log"), guard, database);
-
-        final Completable dropCounty = manageTable(drop.apply("County"), dropLog, database);
-
-        return dropCounty;
-
-//        dropTable("GovernmentData");
-//        dropTable("Precipitation");
-//        dropTable("Temperature");
-//        dropTable("WeatherType");
-//        dropTable("Log");
-//        dropTable("County");
+    private static void dropTables() throws SQLException {
+        dropTable("GovernmentData");
+        dropTable("Precipitation");
+        dropTable("Temperature");
+        dropTable("WeatherType");
+        dropTable("Log");
+        dropTable("County");
     }
 
-    private static Completable createTables(@Nullable Completable dependsOn, Database database) throws SQLException {
-        // stage 1
-        final Completable createCounty = manageTable(CREATE_TABLE_COUNTY, null, database);
-
-        // stage 2
-        final Completable createLog = manageTable(CREATE_TABLE_LOG, createCounty, database);
-
-        // stage 3
-        final Completable createPrecipitation = manageTable(CREATE_TABLE_PRECIPITATION, createLog, database);
-        final Completable createTemperature = manageTable(CREATE_TABLE_TEMPERATURE, createLog, database);
-        final Completable createWeatherType = manageTable(CREATE_TABLE_WEATHER_TYPE, createLog, database);
-        final Completable guard = waitForAllTasksToComplete(createPrecipitation, createTemperature, createWeatherType);
-
-        // stage 4
-        final Completable createGovernmentData = manageTable(CREATE_TABLE_GOVERNMENT_DATA, guard, database);
-
-        return createGovernmentData;
-
-
-//        final Completable createCounty = database.update(CREATE_TABLE_COUNTY).complete();
-//
-//        final Completable createLog =
-//                database.update(CREATE_TABLE_LOG).dependsOn(createCounty).complete();
-//
-//        final Completable createPrecipitation =
-//                database.update(CREATE_TABLE_PRECIPITATION).dependsOn(createLog).complete();
-//
-//        final Completable createTemperature =
-//                database.update(CREATE_TABLE_TEMPERATURE).dependsOn(createLog).complete();
-//
-//        final Completable createWeatherType =
-//                database.update(CREATE_TABLE_WEATHER_TYPE).dependsOn(createLog).complete();
-//
-//        final Completable emitWhenAllCompleted =
-//                Completable.merge(Lists.newArrayList(createPrecipitation, createTemperature, createWeatherType));
-//
-//        final Completable createGovernmentData =
-//                database.update(CREATE_TABLE_GOVERNMENT_DATA)
-//                        .dependsOn(emitWhenAllCompleted)
-//                        .complete();
-//
-//        return createGovernmentData;
-
-//        manageTable(CREATE_TABLE_COUNTY);
-//        manageTable(CREATE_TABLE_LOG);
-//        manageTable(CREATE_TABLE_PRECIPITATION);
-//        manageTable(CREATE_TABLE_TEMPERATURE);
-//        manageTable(CREATE_TABLE_WEATHER_TYPE);
-//        manageTable(CREATE_TABLE_GOVERNMENT_DATA);
+    private static void createTables() throws SQLException {
+        createTable(CREATE_TABLE_COUNTY);
+        createTable(CREATE_TABLE_LOG);
+        createTable(CREATE_TABLE_PRECIPITATION);
+        createTable(CREATE_TABLE_TEMPERATURE);
+        createTable(CREATE_TABLE_WEATHER_TYPE);
+        createTable(CREATE_TABLE_GOVERNMENT_DATA);
     }
 
     private static void dropTable(String tableName) throws SQLException {
         connectToDatabase()
                 .update(String.format("DROP TABLE IF EXISTS %s", tableName))
-                .complete()
+                .counts()
                 .doOnError(Throwable::printStackTrace)
-                .blockingAwait();
+                .blockingSubscribe();
     }
 
     private static void createTable(String createString) throws SQLException {
         connectToDatabase()
                 .update(createString)
-                .complete()
+                .counts()
                 .doOnError(Throwable::printStackTrace)
-                .blockingAwait();
+                .blockingSubscribe();
     }
 
-    private static Completable waitForAllTasksToComplete(Completable ... tasks) {
-        return Completable.merge(Lists.newArrayList(tasks));
-    }
-
-    private static Completable manageTable(
-            @NonNull String command,
-            @Nullable Completable dependsOn,
-            @NonNull Database database) throws SQLException {
-
-        final UpdateBuilder update;
-
-        if (dependsOn != null) {
-            update = database.update(command).dependsOn(dependsOn);
-        } else {
-            update = database.update(command);
-        }
-
-        return update.complete().doOnError(Throwable::printStackTrace);
-    }
-
-    private static Completable populateCountyTable(@Nullable Completable dependsOn, Database database)
-            throws SQLException, FileNotFoundException {
+    private static void populateCountyTable(Database database) throws SQLException, FileNotFoundException {
 
         // create reader to iterate county and geocode information in ks-county-geocodes.csv
-        final CSVReader csvReader = new CSVReader(
-                new FileReader(PopulateDatabase.class.getResource(
-                        "/edu/dbgroup/dbutils/ks-county-geocodes.csv"
-                ).getFile())
-        );
+        final CSVReaderBuilder builder = new CSVReaderBuilder(new FileReader(PopulateDatabase.class.getResource(
+                "/edu/dbgroup/dbutils/ks-county-geocodes.csv"
+        ).getFile()));
+
+        builder.withCSVParser(getDataParser());
+
+        final CSVReader csvReader = builder.build();
 
         // send update command with reader's values, then block until this is done
-        final Completable task;
-
-        if (dependsOn != null) {
-            task = database
-                    .update("INSERT INTO County(County_ID, Name) VALUES(?,?)")
-                    .parameterListStream(Flowable.fromIterable(csvReader)
-                            .map(strings -> Arrays.asList(strings[0], strings[1])))
-                    .dependsOn(dependsOn)
-                    .complete();
-        } else {
-            task = database
-                    .update("INSERT INTO County(County_ID, Name) VALUES(?,?)")
-                    .parameterListStream(Flowable.fromIterable(csvReader)
-                            .map(strings -> Arrays.asList(strings[0], strings[1])))
-                    .complete();
-        }
-
-        return task.doOnError(Throwable::printStackTrace);
+        database
+                .update("INSERT INTO County(County_ID, Name) VALUES(?,?)")
+                .parameterListStream(Flowable.fromIterable(csvReader)
+                        .map(strings -> Arrays.asList(strings[0], strings[1])))
+                .counts()
+                .doOnError(Throwable::printStackTrace) // todo move to subscribe
+                .blockingSubscribe();
     }
 
-    private static Completable populateLogTable(@NonNull LocalDate startDate, @NonNull LocalDate endDateExclusive,
-                                         @Nullable Completable dependsOn, @NonNull Database database)
+    private static void populateLogTable(@NonNull LocalDate startDate, @NonNull LocalDate endDateExclusive,
+                                         @NonNull Database database)
             throws SQLException {
 
         // every day from startDate to endDate
@@ -417,7 +303,7 @@ public class PopulateDatabase {
 
         // every county in the county table
         final Flowable<County> counties =
-            database
+            connectToDatabase()
                 .select("SELECT County_ID, Name FROM County")
                 .autoMap(County.class);
 
@@ -426,239 +312,152 @@ public class PopulateDatabase {
                 counties.flatMap(county -> dates.map(date -> Lists.newArrayList(county.countyID(), date)));
 
         // insert all pairs as rows into Log table
-        final Completable task;
-
-        if (dependsOn != null) {
-            task = database.update("INSERT INTO Log(County_ID, Date) VALUES(?, ?)")
-                    .parameterListStream(cartesianProduct)
-                    .dependsOn(dependsOn)
-                    .complete();
-        } else {
-            task = database.update("INSERT INTO Log(County_ID, Date) VALUES(?, ?)")
-                    .parameterListStream(cartesianProduct)
-                    .complete();
-        }
-
-        return task.doOnError(Throwable::printStackTrace);
+        database.update("INSERT INTO Log(County_ID, Date) VALUES(?, ?)")
+                .parameterListStream(cartesianProduct)
+                .counts()
+                .doOnError(Throwable::printStackTrace)
+                .blockingSubscribe();
     }
 
-    private static void populateGovernmentDataTable() throws SQLException, IOException {
-        @Nullable FileDataStore closeableRef = null;
-        try {
+    private static void populateGovernmentDataTable(Database database) throws SQLException, IOException {
 
-            // load county border data
-            final FileDataStore countyBorderDefs = FileDataStoreFinder.getDataStore(
-                    PopulateDatabase.class.getResource("/edu/dbgroup/gui/data/counties/tl_2018_us_county.shp")
-            );
-            closeableRef = countyBorderDefs;
+        // load county border data
+        final FileDataStore countyBorderDefs = FileDataStoreFinder.getDataStore(
+                PopulateDatabase.class.getResource("/edu/dbgroup/dbutils/data/counties/tl_2018_us_county.shp")
+        );
 
-            // create reader to iterate gov weather data
-            final CSVReader csvReader = new CSVReader(
-                    new FileReader(PopulateDatabase.class.getResource(
-                            "/edu/dbgroup/dbutils/1-1-2018_6-30-2018-ks.csv"
-                    ).getFile())
-            );
+        final CSVReaderBuilder builder = new CSVReaderBuilder(new FileReader(PopulateDatabase.class.getResource(
+                "/edu/dbgroup/dbutils/1-1-2018_6-30-2018-ks.csv"
+        ).getFile()));
 
-            // all rows of data taken from the read csv file
-            final Flowable<GovDataRow> governmentData =
-                    Flowable.fromIterable(csvReader).map(GovDataRow::createFromArray);
+        builder.withCSVParser(getDataParser());
 
-////             sort gov data into groups based on their county which is determined by their latitude/longitude
-//            final Flowable<GroupedFlowable<Integer, GovDataRow>> govDataGroupedByCounty =
-//                    governmentData.groupBy(govData -> getCountyByCoordinate(
-//                            new Coordinate(govData.latitude, govData.longitude),
-//                            countyBorderDefs
-//                    ));
+        final CSVReader csvReader = builder.build();
 
-//            final peekOrSteal =
-//
-//            connectToDatabase()
-//                    .update("INSERT INTO Precipitation(Water, Snow) VALUES(?,?)")
-//                    .parameters(governmentData.bl, governmentData.snow)
-//                    .returnGeneratedKeys()
-//                    .getAs(Integer.class)
+        // all rows of data taken from the read csv file
+        final Flowable<GovDataRow> governmentData =
+                Flowable.fromIterable(csvReader).map(GovDataRow::createFromArray);
 
+        // sort gov data into groups based on their county which is determined by their latitude/longitude
+        final Flowable<GroupedFlowable<Integer, GovDataRow>> govDataGroupedByCounty =
+                governmentData.groupBy(govData -> getCountyByCoordinate(
+                        new Coordinate(govData.longitude, govData.latitude), countyBorderDefs
+                ));
 
-            // todo (if slow) reduce coordinate checks by ~6months*30days times with govData -> groupBy station
-            // todo    -> map each station to countyID with only one comparison check
-            governmentData.blockingSubscribe(govData -> {
+        final Flowable<Tuple2<Integer, GovDataRow>> flattenedGovData = govDataGroupedByCounty
+                .flatMap(grouped -> grouped.map(govDataRow -> Tuple2.create(grouped.getKey(), govDataRow)));
 
-                logger.info(govData.toString());
+        // Precipitation
+        final Flowable<List<?>> flatPrecipitation =
+                flattenedGovData.map(pair -> list(pair.value2().precipitation, pair.value2().snow));
 
-                final int precipKey = connectToDatabase()
-                        .update("INSERT INTO Precipitation(Water, Snow) VALUES(?,?)")
-                        .parameters(govData.precipitation, govData.snow)
-                        .returnGeneratedKeys()
-                        .getAs(Integer.class)
-                        .singleOrError()
-                        .blockingGet();
-
-                final int tempKey = connectToDatabase()
-                        .update("INSERT INTO Temperature(Average, Low, High) VALUES(?,?,?)")
-                        .parameters(govData.tavg, govData.tmin, govData.tmax)
-                        .returnGeneratedKeys()
-                        .getAs(Integer.class)
-                        .singleOrError()
-                        .blockingGet();
-
-                // todo WeatherKeys
-
-                final int countyID =
-                        getCountyByCoordinate(new Coordinate(govData.longitude, govData.latitude), countyBorderDefs);
-
-                // get Log_ID from countyID
-                final int logID = connectToDatabase()
-                        .select("SELECT Log_ID FROM Log WHERE (County_ID = ?) AND (Date = ?)")
-                        .parameters(countyID, govData.date)
-                        .getAs(Integer.class)
-                        .single(-1) // todo look into census coord->county edge cases, -1 is not a good solution
-                        .blockingGet();
-
-                // todo look into cencus cases (code represents extension of above todo)
-                if (logID == -1) {
-                    logger.warn(
-                            String.format("forced to skip: %s\n unreconcilable noaa->census conversion",
-                            govData.toString())
-                    );
-                    return;
-                }
-
-                connectToDatabase()
-                        .update("INSERT INTO GovernmentData(Log_ID, Temperature_ID, Precipitation_ID) VALUES(?,?,?)")
-                        .parameters(logID, tempKey, precipKey)
-                        .complete()
-                        .blockingAwait();
-            }, Throwable::printStackTrace);
-
-            // todo reconsider: do coords equal lat,long or do coord sys conversions need to occur???
-//            governmentData
-//                    .groupBy(data -> data.name) // first group by name (string comparison > n^2 geoutil check)
-//                    .map(nameGrouping -> {
-//                        final GovDataRow peek = nameGrouping.blockingFirst();
-//                        final Coordinate coordinate = new Coordinate(peek.latitude, peek.longitude);
-//
-//                        re
-//                    })
-
-//            governmentData.blockingSubscribe(govData -> {
-//
-//                logger.debug(govData.toString());
-//
-//                final int precipKey = connectToDatabase()
-//                        .update("INSERT INTO Precipitation(Water, Snow) VALUES(?,?)")
-//                        .parameters(govData.precipitation, govData.snow)
-//                        .returnGeneratedKeys()
-//                        .getAs(Integer.class)
-//                        .singleOrError()
-//                        .blockingGet();
-//
-//                final int tempKey = connectToDatabase()
-//                        .update("INSERT INTO Temperature(Average, Low, High) VALUES(?,?,?)")
-//                        .parameters(govData.tavg, govData.tmin, govData.tmax)
-//                        .returnGeneratedKeys()
-//                        .getAs(Integer.class)
-//                        .singleOrError()
-//                        .blockingGet();
-//
-//                // todo WeatherKeys
-//
-//                final int countyID =
-//                        getCountyByCoordinate(new Coordinate(govData.longitude, govData.latitude), countyBorderDefs);
-//
-//                // get Log_ID from countyID
-//                final int logID = connectToDatabase()
-//                        .select("SELECT Log_ID FROM Log WHERE (County_ID = ?) AND (Date = ?)")
-//                        .parameters(countyID, govData.date)
-//                        .getAs(Integer.class)
-//                        .single(-1) // todo look into census coord->county edge cases, -1 is not a good solution
-//                        .blockingGet();
-//
-//                // todo look into cencus cases (code represents extension of above todo)
-//                if (logID == -1) {
-//                    logger.warn(
-//                            String.format("forced to skip: %s\n unreconcilable noaa->census conversion",
-//                                    govData.toString())
-//                    );
-//                    return;
-//                }
-//
-//                connectToDatabase()
-//                        .update("INSERT INTO GovernmentData(Log_ID, Temperature_ID, Precipitation_ID) VALUES(?,?,?)")
-//                        .parameters(logID, tempKey, precipKey)
-//                        .complete()
-//                        .blockingAwait();
-//            }, Throwable::printStackTrace);
-
-//            // TODO ADD PRECIP, TEMP, ETC TO DB THEN SHOVE IDS INTO GOV_DATA
-//            connectToDatabase()
-//                    .update("INSERT INTO Precipitation(Water, Snow) VALUES(?,?)")
-//                    .parameterListStream(
-//
-//                    )
-//                    .complete()
-//                    .blockingAwait();
-//
-//
-//            govDataGroupedByCounty.blockingSubscribe(groupedSubset -> connectToDatabase()
-//                    .update("INSERT INTO GovernmentData(Log_ID, Temperature_ID, Precipitation_ID) VALUES(?,?,?)")
-//                    .parameterListStream(
-//                            groupedSubset.map(govData -> Lists.newArrayList("todo put stuff from INSERTS prior"))
-//                    )
-//                    .complete()
-//                    .blockingAwait());
+        final Flowable<Integer> precipKeys = connectToDatabase().update("INSERT INTO Precipitation(Water, Snow) VALUES(?,?)")
+                .parameterListStream(flatPrecipitation)
+                .returnGeneratedKeys()
+                .getAs(Integer.class);
 
 
-        } finally {
-            if (closeableRef != null) {
-                closeableRef.dispose();
-            }
-        }
+        // Temperature
+        final Flowable<List<?>> flatTemperature =
+                flattenedGovData.map(pair -> Lists.newArrayList(pair.value2().tavg, pair.value2().tmin, pair.value2().tmax));
+
+        final Flowable<Integer> tempKeys = connectToDatabase().update("INSERT INTO Temperature(Average, Low, High) VALUES(?,?,?)")
+                .parameterListStream(flatTemperature)
+                .returnGeneratedKeys()
+                .getAs(Integer.class);
+
+        // Weather todo
+
+        final Flowable<List<?>> flatLog =
+                flattenedGovData.map(pair -> list(pair.value1(), pair.value2().date));
+
+        final Flowable<Integer> logKeys = connectToDatabase()
+                .select("SELECT Log_ID FROM Log WHERE (County_ID = ?) AND (Date = ?)")
+                .parameterListStream(flatLog)
+                .getAs(Integer.class);
+
+        final Flowable<List<?>> zippedKeys = logKeys
+                .zipWith(tempKeys, Tuple2::create)
+                .zipWith(precipKeys, (pair, precip) -> list(pair.value1(), pair.value2(), precip));
+
+        database
+                .update("INSERT INTO GovernmentData(Log_ID, Temperature_ID, Precipitation_ID) VALUES(?,?,?)")
+                .parameterListStream(zippedKeys)
+                .counts()
+                .doOnError(Throwable::printStackTrace)
+                .blockingSubscribe();
 
     }
 
-    private static Integer getCountyByCoordinate(Coordinate coordinate, FileDataStore kansasShapeData) throws IOException {
+    private static ICSVParser getDataParser() {
+        final RFC4180Parser rfc4180Parser = new RFC4180Parser();
+        return rfc4180Parser;
+    }
 
-        try {
-            final SimpleFeatureType schema = kansasShapeData.getFeatureSource().getSchema();
-            final CoordinateReferenceSystem crs = schema.getCoordinateReferenceSystem();
-            final String geomName = schema.getGeometryDescriptor().getLocalName();
+    private static Integer getCountyByCoordinate(@NonNull Coordinate coordinate,
+                                                 @NonNull FileDataStore kansasShapeData) throws IOException {
 
-//        final ReferencedEnvelope bounds = kansasShapeData.getFeatureSource().getBounds();
+        final SpatialIndexFeatureCollection counties =
+                new SpatialIndexFeatureCollection(kansasShapeData.getFeatureSource().getFeatures());
 
-            final FilterFactory2 ff = CommonFactoryFinder.getFilterFactory2();
-            final Filter filter = ff.intersects(ff.property(geomName), ff.literal(coordinate));
+        final GeometryFactory geometryFactory = new GeometryFactory();
+        final Point point = geometryFactory.createPoint(coordinate);
 
-            SimpleFeatureCollection features = null;
-            try {
-                features = kansasShapeData.getFeatureSource().getFeatures(filter);
+        final Iterator<SimpleFeature> iterator = counties.iterator();
 
-                if (features.size() != 1) {
-                    throw new RuntimeException(
-                            String.format("A coordinate was given which returned %d counties", features.size())
-                    );
-                }
+        while (iterator.hasNext()) {
 
-                final String id = features.features().next().getID();
+            final SimpleFeature next = iterator.next();
 
+//            final MultiPolygon polygon = (MultiPolygon) next.getAttribute(0);
+//            if (polygon.contains(point)) {
+//                final String id = next.getID();
+//                return Integer.parseInt(id.substring("tl_2018_us_county.".length()));
+//            }
+
+            // above or below works
+
+            if (((Geometry)next.getDefaultGeometry()).contains(point)) {
+                final String id = next.getID();
                 return Integer.parseInt(id.substring("tl_2018_us_county.".length()));
-
-            } finally {
-                if (features != null) {
-                    features.features().close();
-                }
             }
-        } catch (Exception e) {
-            // todo REMOVE COMMENT
-            // todo REMOVE COMMENT
-            // todo REMOVE COMMENT
-            // todo currently swallowing huge number of exceptions as a result of noaa -> census reconciliation issues
-            // todo ... cannot display stack trace as collecting stack is way too expensive given number of ops
-            // logger.error(String.format("unable to convert coordinate to county @ %s", coordinate.toString()), e);
-            // todo REMOVE COMMENT
-            // todo REMOVE COMMENT
-            // todo REMOVE COMMENT
-            return -1;
         }
+
+        throw new RuntimeException("Unable to get county from point");
+
+//        final SimpleFeatureType schema = kansasShapeData.getFeatureSource().getSchema();
+//        final String geomName = schema.getGeometryDescriptor().getLocalName();
+//
+//        final GeometryFactory factory = new GeometryFactory();
+//        final Point point = factory.createPoint(coordinate);
+//
+//        final FilterFactory2 ff = CommonFactoryFinder.getFilterFactory2();
+//        final Filter filter = ff.contains(ff.property(geomName), ff.literal(point));
+//
+//        final SimpleFeatureCollection features = kansasShapeData.getFeatureSource().getFeatures(filter);
+////            System.out.println("FEATURE INFO: " + features.getID() + ", " + Arrays.toString(features.toArray()));
+////
+////            if (features.size() != 1) {
+////                throw new RuntimeException(
+////                        String.format(
+////                                "A coordinate %s was given which returned %d counties",
+////                                coordinate.toString(),
+////                                features.size()
+////                        )
+////                );
+////            }
+//        final SimpleFeatureIterator iterator = features.features();
+//        try {
+//            final String id = features.features().next().getID();
+//            return Integer.parseInt(id.substring("tl_2018_us_county.".length()));
+//        } finally {
+//            kansasShapeData.dispose();
+//            iterator.close();
+//        }
+    }
+
+    private static List<?> list(Object ... objects) {
+        return Lists.newArrayList(objects);
     }
 
     /**
@@ -720,18 +519,14 @@ public class PopulateDatabase {
             }
         }
 
-        @Nullable
-        Integer parseIntegerOrReturnNull(String potentialInteger) {
-            try {
-                return Integer.parseInt(potentialInteger);
-            } catch (Exception e) {
-                return null;
-            }
-        }
-
         static GovDataRow createFromArray(String[] strings) {
-            System.out.println(strings.length + ", " + Arrays.toString(strings));
-            Preconditions.checkArgument(strings.length == 22);
+//            try {
+//                Preconditions.checkArgument(strings.length == 22);
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//                System.err.println(strings.length + ", " + Arrays.toString(strings));
+//            }
+
             return new GovDataRow(strings[0], strings[1], strings[2], strings[3],
                     strings[4], strings[5], strings[6], strings[7], strings[8],
                     strings[9], strings[10], strings[11], strings[12], strings[13],
@@ -767,5 +562,4 @@ public class PopulateDatabase {
                     '}';
         }
     }
-
 }
