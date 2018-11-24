@@ -2,30 +2,26 @@ package edu.dbgroup.dbutils;
 
 import com.github.davidmoten.guavamini.Preconditions;
 import com.google.common.collect.Lists;
-import com.opencsv.*;
-import com.vividsolutions.jts.geom.*;
-import com.vividsolutions.jts.geom.util.GeometryTransformer;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.ICSVParser;
+import com.opencsv.RFC4180Parser;
+import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.Point;
 import edu.dbgroup.logic.database.County;
 import io.reactivex.Flowable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import io.reactivex.flowables.GroupedFlowable;
 import org.davidmoten.rx.jdbc.Database;
-import org.davidmoten.rx.jdbc.UpdateBuilder;
+import org.davidmoten.rx.jdbc.pool.DatabaseType;
 import org.davidmoten.rx.jdbc.tuple.Tuple2;
 import org.geotools.data.FileDataStore;
 import org.geotools.data.FileDataStoreFinder;
 import org.geotools.data.collection.SpatialIndexFeatureCollection;
-import org.geotools.data.simple.SimpleFeatureCollection;
-import org.geotools.data.simple.SimpleFeatureIterator;
-import org.geotools.factory.CommonFactoryFinder;
 import org.opengis.feature.simple.SimpleFeature;
-import org.opengis.feature.simple.SimpleFeatureType;
-import org.opengis.feature.type.Name;
-import org.opengis.filter.Filter;
-import org.opengis.filter.FilterFactory2;
-import org.opengis.filter.expression.Expression;
-import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,12 +29,14 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.sql.Date;
-import java.sql.SQLException;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A utility class which will automatically populate the weather app database with data.
@@ -57,31 +55,43 @@ public class PopulateDatabase {
     /*
      * Info for connecting to database. This may differ between databases.
      */
-    private static final String DATABASE_URL = "jdbc:sqlserver://localhost:1433;DatabaseName=TestDB;user=SA;password=Group_15";
-//    private static final String DATABASE_USERNAME = "SA";
-//    private static final String DATABASE_PASSWORD = "Group_15";
+    private static final String DATABASE_URL = "jdbc:sqlserver://localhost:1433";
+
+    private final static Properties DATABASE_PROPERTIES = new Properties();
+    static {
+        DATABASE_PROPERTIES.setProperty("DatabaseName", "TestDB");
+        DATABASE_PROPERTIES.setProperty("user", "SA");
+        DATABASE_PROPERTIES.setProperty("password", "Group_15");
+    }
+
+    // Durations should be in seconds or above
+    private final static Duration IDLE_TIME_BEFORE_HEALTH_CHECK = Duration.ofSeconds(5);
+    private final static Duration MAX_IDLE_TIME = Duration.ofDays(2); // max time for any (batch) operation to run
+    private final static Duration CONNECTION_RETRY_INTERVAL = Duration.ofDays(2); // must also be very high
+
+    private final static int MAX_POOL_SIZE = 8;
 
     /*
      * String to load driver for Microsoft sqlserver. This is only here as a contingency for legacy servers.
      */
-    private static final String JDBC_DRIVER = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
+//    private static final String JDBC_DRIVER = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
 
     /*
      * Strings for creating each table in the database.
      */
-    private static final String CREATE_TABLE_USER_DATA =
-            "CREATE TABLE [UserData] (\n" +
-                    "  [UserData_ID] INT,\n" +
-                    "  [User_ID] INT,\n" +
-                    "  [Log_ID] INT,\n" +
-                    "  [Temperature_ID] INT,\n" +
-                    "  [Precipitation_ID] INT,\n" +
-                    "  [CreatedOn] DATETIME,\n" +
-                    "  [UpdatedOn] DATETIME,\n" +
-                    "  PRIMARY KEY ([UserData_ID])\n" +
-                    ");\n" +
-                    "\n" +
-                    "CREATE INDEX [FK] ON  [UserData] ([User_ID], [Log_ID], [Temperature_ID], [Precipitation_ID]);";
+//    private static final String CREATE_TABLE_USER_DATA =
+//            "CREATE TABLE [UserData] (\n" +
+//                    "  [UserData_ID] INT,\n" +
+//                    "  [User_ID] INT,\n" +
+//                    "  [Log_ID] INT,\n" +
+//                    "  [Temperature_ID] INT,\n" +
+//                    "  [Precipitation_ID] INT,\n" +
+//                    "  [CreatedOn] DATETIME,\n" +
+//                    "  [UpdatedOn] DATETIME,\n" +
+//                    "  PRIMARY KEY ([UserData_ID])\n" +
+//                    ");\n" +
+//                    "\n" +
+//                    "CREATE INDEX [FK] ON  [UserData] ([User_ID], [Log_ID], [Temperature_ID], [Precipitation_ID]);";
 
     private static final String CREATE_TABLE_WEATHER_TYPE =
             "CREATE TABLE [WeatherType] (\n" +
@@ -93,21 +103,21 @@ public class PopulateDatabase {
 //                    "CREATE INDEX [UK] ON  [WeatherType] ([Value]);";
 
 
-    private static final String CREATE_TABLE_USER_WEATHER_TYPE =
-            "CREATE TABLE [UserWeatherType] (\n" +
-                    "  [UserData_ID] INT,\n" +
-                    "  [WeatherType_ID] INT\n" +
-                    ");\n" +
-                    "\n" +
-                    "CREATE INDEX [UK] ON  [UserWeatherType] ([UserData_ID], [WeatherType_ID]);";
+//    private static final String CREATE_TABLE_USER_WEATHER_TYPE =
+//            "CREATE TABLE [UserWeatherType] (\n" +
+//                    "  [UserData_ID] INT DEFAULT NULL,\n" +
+//                    "  [WeatherType_ID] INT DEFAULT NULL\n" +
+//                    ");\n" +
+//                    "\n" +
+//                    "CREATE INDEX [UK] ON  [UserWeatherType] ([UserData_ID], [WeatherType_ID]);";
 
-    private static final String CREATE_TABLE_GOVERNMENT_WEATHER_TYPE =
-            "CREATE TABLE [GovernmentWeatherType] (\n" +
-                    "  [GovernmentData_ID] INT,\n" +
-                    "  [WeatherType_ID] INT\n" +
-                    ");\n" +
-                    "\n" +
-                    "CREATE INDEX [UK] ON  [GovernmentWeatherType] ([GovernmentData_ID], [WeatherType_ID]);";
+//    private static final String CREATE_TABLE_GOVERNMENT_WEATHER_TYPE =
+//            "CREATE TABLE [GovernmentWeatherType] (\n" +
+//                    "  [GovernmentData_ID] INT DEFAULT NULL,\n" +
+//                    "  [WeatherType_ID] INT DEFAULT NULL\n" +
+//                    ");\n" +
+//                    "\n" +
+//                    "CREATE INDEX [UK] ON  [GovernmentWeatherType] ([GovernmentData_ID], [WeatherType_ID]);";
 
     private static final String CREATE_TABLE_LOG =
             "CREATE TABLE [Log] (\n" +
@@ -120,38 +130,38 @@ public class PopulateDatabase {
 //                    "\n" +
 //                    "CREATE INDEX [UK] ON  [Log] ([Date]);";
 
-    private static final String CREATE_TABLE_ZIP =
-            "CREATE TABLE [Zip] (\n" +
-                    "  [Zip_Code ] INT,\n" +
-                    "  [County_ID] INT,\n" +
-                    "  PRIMARY KEY ([Zip_Code ])\n" +
-                    ");\n" +
-                    "\n" +
-                    "CREATE INDEX [FK] ON  [Zip] ([County_ID]);";
+//    private static final String CREATE_TABLE_ZIP =
+//            "CREATE TABLE [Zip] (\n" +
+//                    "  [Zip_Code ] INT,\n" +
+//                    "  [County_ID] INT,\n" +
+//                    "  PRIMARY KEY ([Zip_Code ])\n" +
+//                    ");\n" +
+//                    "\n" +
+//                    "CREATE INDEX [FK] ON  [Zip] ([County_ID]);";
 
     private static final String CREATE_TABLE_PRECIPITATION =
             "CREATE TABLE [Precipitation] (\n" +
                     "  [Precipitation_ID] INT NOT NULL IDENTITY(1, 1) PRIMARY KEY,\n" +
-                    "  [Water] DECIMAL,\n" +
-                    "  [Snow] DECIMAL\n" +
+                    "  [Water] DECIMAL(3,2) DEFAULT NULL,\n" +
+                    "  [Snow] DECIMAL(2,1) DEFAULT NULL\n" +
 //                    "  PRIMARY KEY ([Precipitation_ID])\n" +
                     ");";
 //                    "\n" +
 //                    "CREATE INDEX [NULLABLE] ON  [Precipitation] ([Water], [Snow]);";
 
-    private static final String CREATE_TABLE_WARNING =
-            "CREATE TABLE [Warning] (\n" +
-                    "  [Warning_ID] INT,\n" +
-                    "  [UserData_ID] INT,\n" +
-                    "  [Severity] INT,\n" +
-                    "  [Category] INT,\n" +
-                    "  [Description] VARCHAR(256),\n" +
-                    "  [CreatedOn] DATETIME,\n" +
-                    "  [UpdatedOn] DATETIME,\n" +
-                    "  PRIMARY KEY ([Warning_ID])\n" +
-                    ");\n" +
-                    "\n" +
-                    "CREATE INDEX [FK] ON  [Warning] ([UserData_ID]);";
+//    private static final String CREATE_TABLE_WARNING =
+//            "CREATE TABLE [Warning] (\n" +
+//                    "  [Warning_ID] INT,\n" +
+//                    "  [UserData_ID] INT,\n" +
+//                    "  [Severity] INT,\n" +
+//                    "  [Category] INT,\n" +
+//                    "  [Description] VARCHAR(256),\n" +
+//                    "  [CreatedOn] DATETIME,\n" +
+//                    "  [UpdatedOn] DATETIME,\n" +
+//                    "  PRIMARY KEY ([Warning_ID])\n" +
+//                    ");\n" +
+//                    "\n" +
+//                    "CREATE INDEX [FK] ON  [Warning] ([UserData_ID]);";
 
     // depends on Log
     private static final String CREATE_TABLE_COUNTY =
@@ -160,7 +170,7 @@ public class PopulateDatabase {
                     "  [County_ID] INT NOT NULL PRIMARY KEY,\n" + // equals GEOCODE
 //                    "  [Log_ID] INT NOT NULL FOREIGN KEY REFERENCES Log(Log_ID),\n" +
 //            "  [PhysioRegion_ID] INT,\n" +
-                    "  [Name] VARCHAR(12)\n" +
+                    "  [Name] VARCHAR(12) NOT NULL\n" +
                     ");";
 
     private static final String CREATE_TABLE_GOVERNMENT_DATA =
@@ -181,97 +191,116 @@ public class PopulateDatabase {
     private static final String CREATE_TABLE_TEMPERATURE =
             "CREATE TABLE [Temperature] (\n" +
                     "  [Temperature_ID] INT NOT NULL IDENTITY(1, 1) PRIMARY KEY,\n" +
-                    "  [Average] DECIMAL,\n" +
-                    "  [High] DECIMAL,\n" +
-                    "  [Low] DECIMAL\n" +
+                    "  [Average] INT DEFAULT NULL,\n" +
+                    "  [High] INT DEFAULT NULL,\n" +
+                    "  [Low] INT DEFAULT NULL\n" +
 //                    "  PRIMARY KEY ([Temperature_ID])\n" +
                     ");";
 //                    "\n" +
 //                    "CREATE INDEX [NULLABLE] ON  [Temperature] ([Average], [High], [Low]);";
 
-    private static final String CREATE_TABLE_COUNTY_PHYSIO_REGION =
-            "CREATE TABLE [CountyPhysioRegion] (\n" +
-                    "  [County_ID] INT,\n" +
-                    "  [PhysioRegion_ID] INT\n" +
-                    ");\n" +
-                    "\n" +
-                    "CREATE INDEX [UK] ON  [CountyPhysioRegion] ([County_ID], [PhysioRegion_ID]);";
+//    private static final String CREATE_TABLE_COUNTY_PHYSIO_REGION =
+//            "CREATE TABLE [CountyPhysioRegion] (\n" +
+//                    "  [County_ID] INT,\n" +
+//                    "  [PhysioRegion_ID] INT\n" +
+//                    ");\n" +
+//                    "\n" +
+//                    "CREATE INDEX [UK] ON  [CountyPhysioRegion] ([County_ID], [PhysioRegion_ID]);";
 
-    private static final String CREATE_TABLE_PHYSIO_REGION =
-            "CREATE TABLE [PhysioRegion] (\n" +
-                    "  [PhysioRegion_ID] INT,\n" +
-                    "  [Name] VARCHAR(12),\n" +
-                    "  PRIMARY KEY ([PhysioRegion_ID])\n" +
-                    ");";
+//    private static final String CREATE_TABLE_PHYSIO_REGION =
+//            "CREATE TABLE [PhysioRegion] (\n" +
+//                    "  [PhysioRegion_ID] INT,\n" +
+//                    "  [Name] VARCHAR(12),\n" +
+//                    "  PRIMARY KEY ([PhysioRegion_ID])\n" +
+//                    ");";
 
-    private static final String CREATE_TABLE_USER =
-            "CREATE TABLE [User] (\n" +
-                    "  [User_ID] INT,\n" +
-                    "  [FirstName] VARCHAR(30),\n" +
-                    "  [LastName] VARCHAR(30),\n" +
-                    "  [Username] VARCHAR(20),\n" +
-                    "  [CreatedOn] DATETIME,\n" +
-                    "  [UpdatedOn] DATETIME,\n" +
-                    "  PRIMARY KEY ([User_ID])\n" +
-                    ");\n" +
-                    "\n" +
-                    "CREATE INDEX [UK] ON  [User] ([Username]);";
+//    private static final String CREATE_TABLE_USER =
+//            "CREATE TABLE [User] (\n" +
+//                    "  [User_ID] INT,\n" +
+//                    "  [FirstName] VARCHAR(30),\n" +
+//                    "  [LastName] VARCHAR(30),\n" +
+//                    "  [Username] VARCHAR(20),\n" +
+//                    "  [CreatedOn] DATETIME,\n" +
+//                    "  [UpdatedOn] DATETIME,\n" +
+//                    "  PRIMARY KEY ([User_ID])\n" +
+//                    ");\n" +
+//                    "\n" +
+//                    "CREATE INDEX [UK] ON  [User] ([Username]);";
 
-    public static void main(String[] args) throws SQLException, IOException, InterruptedException {
-        // todo: close connectToDatabase() calls to avoid leaks
-        try (final Database database = connectToDatabase()) {
-            dropTables();
-            createTables();
-            populateCountyTable(connectToDatabase());
-            populateLogTable(LocalDate.of(2018, 1, 1), LocalDate.of(2018, 7, 1), connectToDatabase());
-            populateGovernmentDataTable(connectToDatabase());
+    public static void main(String[] args) throws IOException {
+        logger.info("Connecting to database...");
+        try (final Database database = getDatabase()) {
+
+            logger.info("Dropping existing tables in database...");
+            dropTables(database);
+
+            logger.info("Creating tables in database...");
+            createTables(database);
+
+            logger.info("Populating table: County...");
+            populateCountyTable(database);
+
+            logger.info("Populating table: Log...");
+            populateLogTable(LocalDate.of(2018, 1, 1), LocalDate.of(2018, 7, 1), database);
+
+            logger.info("Populating table GovernmentData...");
+            populateGovernmentDataTable(database);
+
+            logger.info("Closing database...");
         }
+        logger.info("Success! Program will now exit.");
+    }
+//
+    private static Database getDatabase() {
+        return Database
+                .nonBlocking()
+                .url(DATABASE_URL)
+                .healthCheck(DatabaseType.SQL_SERVER)
+                .idleTimeBeforeHealthCheck(IDLE_TIME_BEFORE_HEALTH_CHECK.getSeconds(), TimeUnit.SECONDS)
+                .maxIdleTime(MAX_IDLE_TIME.getSeconds(), TimeUnit.SECONDS)
+                .connectionRetryInterval(CONNECTION_RETRY_INTERVAL.getSeconds(), TimeUnit.SECONDS)
+                .maxPoolSize(MAX_POOL_SIZE)
+                .properties(DATABASE_PROPERTIES)
+                .connnectionListener(connection ->
+                        logger.debug(String.format("Database recieved new connection: %s", connection.toString())))
+                .build();
     }
 
-
-
-    private static Database connectToDatabase() throws SQLException {
-//        final Connection connection = DriverManager.getConnection(DATABASE_URL, DATABASE_USERNAME, DATABASE_PASSWORD);
-//        return Database.fromBlocking(ConnectionProvider.from(connection));
-        return Database.from(DATABASE_URL, 1);
-
+    private static void dropTables(Database database) {
+        dropTable("GovernmentData", database);
+        dropTable("Precipitation", database);
+        dropTable("Temperature", database);
+        dropTable("WeatherType", database);
+        dropTable("Log", database);
+        dropTable("County", database);
     }
 
-    private static void dropTables() throws SQLException {
-        dropTable("GovernmentData");
-        dropTable("Precipitation");
-        dropTable("Temperature");
-        dropTable("WeatherType");
-        dropTable("Log");
-        dropTable("County");
+    private static void createTables(Database database) {
+        createTable(CREATE_TABLE_COUNTY, database);
+        createTable(CREATE_TABLE_LOG, database);
+        createTable(CREATE_TABLE_PRECIPITATION, database);
+        createTable(CREATE_TABLE_TEMPERATURE, database);
+        createTable(CREATE_TABLE_WEATHER_TYPE, database);
+        createTable(CREATE_TABLE_GOVERNMENT_DATA, database);
     }
 
-    private static void createTables() throws SQLException {
-        createTable(CREATE_TABLE_COUNTY);
-        createTable(CREATE_TABLE_LOG);
-        createTable(CREATE_TABLE_PRECIPITATION);
-        createTable(CREATE_TABLE_TEMPERATURE);
-        createTable(CREATE_TABLE_WEATHER_TYPE);
-        createTable(CREATE_TABLE_GOVERNMENT_DATA);
-    }
-
-    private static void dropTable(String tableName) throws SQLException {
-        connectToDatabase()
-                .update(String.format("DROP TABLE IF EXISTS %s", tableName))
+    private static void dropTable(String tableName, Database database) {
+        database.update(String.format("DROP TABLE IF EXISTS %s", tableName))
                 .counts()
+                .onBackpressureBuffer()
                 .doOnError(Throwable::printStackTrace)
                 .blockingSubscribe();
     }
 
-    private static void createTable(String createString) throws SQLException {
-        connectToDatabase()
-                .update(createString)
+    private static void createTable(String createString, Database database) {
+        database.update(createString)
                 .counts()
+                .onBackpressureBuffer()
                 .doOnError(Throwable::printStackTrace)
                 .blockingSubscribe();
     }
 
-    private static void populateCountyTable(Database database) throws SQLException, FileNotFoundException {
+    private static void populateCountyTable(Database database) throws FileNotFoundException {
 
         // create reader to iterate county and geocode information in ks-county-geocodes.csv
         final CSVReaderBuilder builder = new CSVReaderBuilder(new FileReader(PopulateDatabase.class.getResource(
@@ -283,115 +312,111 @@ public class PopulateDatabase {
         final CSVReader csvReader = builder.build();
 
         // send update command with reader's values, then block until this is done
-        database
-                .update("INSERT INTO County(County_ID, Name) VALUES(?,?)")
+        database.update("INSERT INTO County(County_ID, Name) VALUES(?,?)")
                 .parameterListStream(Flowable.fromIterable(csvReader)
                         .map(strings -> Arrays.asList(strings[0], strings[1])))
                 .counts()
+                .onBackpressureBuffer()
                 .doOnError(Throwable::printStackTrace) // todo move to subscribe
                 .blockingSubscribe();
     }
 
     private static void populateLogTable(@NonNull LocalDate startDate, @NonNull LocalDate endDateExclusive,
-                                         @NonNull Database database)
-            throws SQLException {
+                                         @NonNull Database database) {
+            // every day from startDate to endDate
+            final Flowable<Date> dates =
+                    Flowable.rangeLong(0L, ChronoUnit.DAYS.between(startDate, endDateExclusive))
+                            .map(daysSince -> Date.valueOf(startDate.plusDays(daysSince)));
 
-        // every day from startDate to endDate
-        final Flowable<Date> dates =
-                Flowable.rangeLong(0L, ChronoUnit.DAYS.between(startDate, endDateExclusive))
-                        .map(daysSince -> Date.valueOf(startDate.plusDays(daysSince)));
+            // every county in the county table
+            final Flowable<County> counties =
+                    database.select("SELECT County_ID, Name FROM County")
+                            .autoMap(County.class);
 
-        // every county in the county table
-        final Flowable<County> counties =
-            connectToDatabase()
-                .select("SELECT County_ID, Name FROM County")
-                .autoMap(County.class);
+            // all possible pairs between dates and counties
+            final Flowable<List<?>> cartesianProduct =
+                    counties.flatMap(county -> dates.map(date -> Lists.newArrayList(county.countyID(), date)));
 
-        // all possible pairs between dates and counties
-        final Flowable<List<?>> cartesianProduct =
-                counties.flatMap(county -> dates.map(date -> Lists.newArrayList(county.countyID(), date)));
-
-        // insert all pairs as rows into Log table
-        database.update("INSERT INTO Log(County_ID, Date) VALUES(?, ?)")
-                .parameterListStream(cartesianProduct)
-                .counts()
-                .doOnError(Throwable::printStackTrace)
-                .blockingSubscribe();
+            // insert all pairs as rows into Log table
+            database.update("INSERT INTO Log(County_ID, Date) VALUES(?, ?)")
+                    .parameterListStream(cartesianProduct)
+                    .counts()
+                    .onBackpressureBuffer()
+                    .doOnError(Throwable::printStackTrace)
+                    .blockingSubscribe();
     }
 
-    private static void populateGovernmentDataTable(Database database) throws SQLException, IOException {
+    private static void populateGovernmentDataTable(Database database) throws IOException {
 
-        // load county border data
-        final FileDataStore countyBorderDefs = FileDataStoreFinder.getDataStore(
-                PopulateDatabase.class.getResource("/edu/dbgroup/dbutils/data/counties/tl_2018_us_county.shp")
-        );
+            // load county border data
+            final FileDataStore countyBorderDefs = FileDataStoreFinder.getDataStore(
+                    PopulateDatabase.class.getResource("/edu/dbgroup/dbutils/data/counties/tl_2018_us_county.shp")
+            );
 
-        final CSVReaderBuilder builder = new CSVReaderBuilder(new FileReader(PopulateDatabase.class.getResource(
-                "/edu/dbgroup/dbutils/1-1-2018_6-30-2018-ks.csv"
-        ).getFile()));
+            final CSVReaderBuilder builder = new CSVReaderBuilder(new FileReader(PopulateDatabase.class.getResource(
+                    "/edu/dbgroup/dbutils/1-1-2018_6-30-2018-ks.csv"
+            ).getFile()));
 
-        builder.withCSVParser(getDataParser());
+            builder.withCSVParser(getDataParser());
 
-        final CSVReader csvReader = builder.build();
+            final CSVReader csvReader = builder.build();
 
-        // all rows of data taken from the read csv file
-        final Flowable<GovDataRow> governmentData =
-                Flowable.fromIterable(csvReader).map(GovDataRow::createFromArray);
+            // all rows of data taken from the read csv file
+            final Flowable<GovDataRow> governmentData =
+                    Flowable.fromIterable(csvReader).map(GovDataRow::createFromArray);
 
-        // sort gov data into groups based on their county which is determined by their latitude/longitude
-        final Flowable<GroupedFlowable<Integer, GovDataRow>> govDataGroupedByCounty =
-                governmentData.groupBy(govData -> getCountyByCoordinate(
-                        new Coordinate(govData.longitude, govData.latitude), countyBorderDefs
-                ));
+            // sort gov data into groups based on their county which is determined by their latitude/longitude
+            final Flowable<GroupedFlowable<Integer, GovDataRow>> govDataGroupedByCounty =
+                    governmentData.groupBy(govData -> getCountyByCoordinate(
+                            new Coordinate(govData.longitude, govData.latitude), countyBorderDefs
+                    ));
 
-        final Flowable<Tuple2<Integer, GovDataRow>> flattenedGovData = govDataGroupedByCounty
-                .flatMap(grouped -> grouped.map(govDataRow -> Tuple2.create(grouped.getKey(), govDataRow)));
+            final Flowable<Tuple2<Integer, GovDataRow>> flattenedGovData = govDataGroupedByCounty
+                    .flatMap(grouped -> grouped.map(govDataRow -> Tuple2.create(grouped.getKey(), govDataRow)));
 
-        // Precipitation
-        final Flowable<List<?>> flatPrecipitation =
-                flattenedGovData.map(pair -> list(pair.value2().precipitation, pair.value2().snow));
+            // Precipitation
+            final Flowable<List<?>> flatPrecipitation =
+                    flattenedGovData.map(pair -> list(pair.value2().precipitation, pair.value2().snow));
 
-        final Flowable<Integer> precipKeys = connectToDatabase().update("INSERT INTO Precipitation(Water, Snow) VALUES(?,?)")
-                .parameterListStream(flatPrecipitation)
-                .returnGeneratedKeys()
-                .getAs(Integer.class);
+            final Flowable<Integer> precipKeys = database.update("INSERT INTO Precipitation(Water, Snow) VALUES(?,?)")
+                    .parameterListStream(flatPrecipitation)
+                    .returnGeneratedKeys()
+                    .getAs(Integer.class);
 
 
-        // Temperature
-        final Flowable<List<?>> flatTemperature =
-                flattenedGovData.map(pair -> Lists.newArrayList(pair.value2().tavg, pair.value2().tmin, pair.value2().tmax));
+            // Temperature
+            final Flowable<List<?>> flatTemperature =
+                    flattenedGovData.map(pair -> Lists.newArrayList(pair.value2().tavg, pair.value2().tmin, pair.value2().tmax));
 
-        final Flowable<Integer> tempKeys = connectToDatabase().update("INSERT INTO Temperature(Average, Low, High) VALUES(?,?,?)")
-                .parameterListStream(flatTemperature)
-                .returnGeneratedKeys()
-                .getAs(Integer.class);
+            final Flowable<Integer> tempKeys = database.update("INSERT INTO Temperature(Average, Low, High) VALUES(?,?,?)")
+                    .parameterListStream(flatTemperature)
+                    .returnGeneratedKeys()
+                    .getAs(Integer.class);
 
-        // Weather todo
+            // Weather todo
 
-        final Flowable<List<?>> flatLog =
-                flattenedGovData.map(pair -> list(pair.value1(), pair.value2().date));
+            final Flowable<List<?>> flatLog =
+                    flattenedGovData.map(pair -> list(pair.value1(), pair.value2().date));
 
-        final Flowable<Integer> logKeys = connectToDatabase()
-                .select("SELECT Log_ID FROM Log WHERE (County_ID = ?) AND (Date = ?)")
-                .parameterListStream(flatLog)
-                .getAs(Integer.class);
+            final Flowable<Integer> logKeys = database
+                    .select("SELECT Log_ID FROM Log WHERE (County_ID = ?) AND (Date = ?)")
+                    .parameterListStream(flatLog)
+                    .getAs(Integer.class);
 
-        final Flowable<List<?>> zippedKeys = logKeys
-                .zipWith(tempKeys, Tuple2::create)
-                .zipWith(precipKeys, (pair, precip) -> list(pair.value1(), pair.value2(), precip));
+            final Flowable<List<?>> zippedKeys = logKeys
+                    .zipWith(tempKeys, Tuple2::create)
+                    .zipWith(precipKeys, (pair, precip) -> list(pair.value1(), pair.value2(), precip));
 
-        database
-                .update("INSERT INTO GovernmentData(Log_ID, Temperature_ID, Precipitation_ID) VALUES(?,?,?)")
-                .parameterListStream(zippedKeys)
-                .counts()
-                .doOnError(Throwable::printStackTrace)
-                .blockingSubscribe();
-
+            database.update("INSERT INTO GovernmentData(Log_ID, Temperature_ID, Precipitation_ID) VALUES(?,?,?)")
+                    .parameterListStream(zippedKeys)
+                    .counts()
+                    .onBackpressureBuffer()
+                    .doOnError(Throwable::printStackTrace)
+                    .blockingSubscribe();
     }
 
     private static ICSVParser getDataParser() {
-        final RFC4180Parser rfc4180Parser = new RFC4180Parser();
-        return rfc4180Parser;
+        return new RFC4180Parser();
     }
 
     private static Integer getCountyByCoordinate(@NonNull Coordinate coordinate,
@@ -468,7 +493,8 @@ public class PopulateDatabase {
         final String station, name, /*latitude, longitude,*/ elevation, /*date,*/ /*precipitation, snow, tavg, tmax, tmin,*/
             wt01, wt02, wt03, wt04, wt05, wt06, wt07, wt08, wt09, wt11, wt15;
 
-        final Double latitude, longitude, precipitation, snow, tavg, tmax, tmin;
+        final Double latitude, longitude, precipitation, snow;
+        final Integer tavg, tmax, tmin;
 
         final Date date;
 
@@ -494,9 +520,9 @@ public class PopulateDatabase {
             this.date = Date.valueOf(LocalDate.of(year, month, day));
             this.precipitation = parseDoubleOrReturnNull(precipitation);
             this.snow = parseDoubleOrReturnNull(snow);
-            this.tavg = parseDoubleOrReturnNull(tavg);
-            this.tmax = parseDoubleOrReturnNull(tmax);
-            this.tmin = parseDoubleOrReturnNull(tmin);
+            this.tavg = parseIntegerOrReturnNull(tavg);
+            this.tmax = parseIntegerOrReturnNull(tmax);
+            this.tmin = parseIntegerOrReturnNull(tmin);
             this.wt01 = wt01;
             this.wt02 = wt02;
             this.wt03 = wt03;
@@ -514,6 +540,15 @@ public class PopulateDatabase {
         Double parseDoubleOrReturnNull(String potentialDouble) {
             try {
                 return Double.parseDouble(potentialDouble);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        @Nullable
+        Integer parseIntegerOrReturnNull(String potentialDouble) {
+            try {
+                return Integer.parseInt(potentialDouble);
             } catch (Exception e) {
                 return null;
             }
