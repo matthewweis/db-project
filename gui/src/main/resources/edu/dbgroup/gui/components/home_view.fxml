@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import edu.dbgroup.gui.components.PropertyValueRow?>
 <?import javafx.collections.FXCollections?>
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.cell.PropertyValueFactory?>
@@ -41,8 +40,8 @@
               </columns>
                <items>
                   <FXCollections fx:factory="observableArrayList">
-                     <PropertyValueRow property="County" value="?" fx:id="countyPropertyValueRow" />
-                     <PropertyValueRow property="Date" value="?" fx:id="datePropertyValueRow" />
+                      <fx:include source="table_row.fxml" fx:id="countyTableRow"/>
+                      <fx:include source="table_row.fxml" fx:id="dateTableRow"/>
                   </FXCollections>
                </items>
             </TableView>

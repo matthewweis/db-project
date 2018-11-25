@@ -6,15 +6,15 @@ import javafx.beans.property.SimpleStringProperty;
  * Simple class which holds two {@link javafx.beans.property.StringProperty}s. These properties are displayed in a
  * {@link javafx.scene.control.TableView} in the {@link HomeView}.
  */
-public class PropertyValueRow {
+public class TableRow {
 
     private final SimpleStringProperty property = new SimpleStringProperty("");
 
     private final SimpleStringProperty value = new SimpleStringProperty("");
 
-    public PropertyValueRow() { }
+    public TableRow() { }
 
-    public PropertyValueRow(String property, String value) {
+    public TableRow(String property, String value) {
         setProperty(property);
         setValue(value);
     }

@@ -28,10 +28,10 @@ public class HomeView extends VBox {
     private DatePicker datePicker;
 
     @FXML
-    private PropertyValueRow countyPropertyValueRow;
+    private TableRow countyTableRow;
 
     @FXML
-    private PropertyValueRow datePropertyValueRow;
+    private TableRow dateTableRow;
 
     @FXML
     private void initialize() {
@@ -39,10 +39,10 @@ public class HomeView extends VBox {
     }
 
     private void initPropertyBindings() {
-        countyPropertyValueRow.valueProperty()
+        countyTableRow.valueProperty()
                 .bind(ServiceProvider.INSTANCE.getKansasMapModel().selectedCountyProperty());
 
-        datePropertyValueRow.valueProperty()
+        dateTableRow.valueProperty()
                 .bind(ServiceProvider.INSTANCE.getHomeViewModel().selectedDateProperty().asString());
 
         ServiceProvider.INSTANCE.getHomeViewModel().selectedDateProperty().bind(datePicker.valueProperty());
