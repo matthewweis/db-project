@@ -1,5 +1,6 @@
 package edu.dbgroup.logic.models;
 
+import edu.dbgroup.logic.ServiceProvider;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 
@@ -9,7 +10,7 @@ import java.time.LocalDate;
  * Model representing data for the "home" view screen, which is the base screen where the date, map
  * (see {@link KansasMapModel}, info, etc. is all displayed to the user.
  *
- * To access an instance of this class, see {@link ServiceProvider#getHomeViewModel()}.
+ * To access an instance of this class, see {@link ServiceProvider#MODELS} -> {@link Models#getHomeViewModel()}.
  */
 public class HomeViewModel {
 

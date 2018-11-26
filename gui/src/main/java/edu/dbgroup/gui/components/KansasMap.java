@@ -6,7 +6,7 @@ import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.MultiLineString;
 import com.vividsolutions.jts.geom.MultiPolygon;
 import edu.dbgroup.logic.models.KansasMapModel;
-import edu.dbgroup.logic.models.ServiceProvider;
+import edu.dbgroup.logic.ServiceProvider;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import javafx.fxml.FXML;
@@ -170,20 +170,6 @@ public class KansasMap extends VBox { // todo make disposable for map
         b.setCRS(DefaultGeographicCRS.WGS84);
 
         final GeometryFactory geometryFactory = JTSFactoryFinder.getGeometryFactory();
-
-//        canvas.addEventHandler(MouseEvent.MOUSE_MOVED, event -> {
-//            try {
-//                final SimpleFeature simpleFeature = clickIntersection(event);
-//                if (simpleFeature != null) {
-//                    if (lastSelectedFeature == null || simpleFeature != lastSelectedFeature ) {
-//                        lastSelectedFeature = simpleFeature;
-//                        draw(simpleFeature);
-//                    }
-//                }
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//            }
-//        });
     }
 
     private Style createSelectedStyle(FeatureId IDs) {
@@ -298,11 +284,16 @@ public class KansasMap extends VBox { // todo make disposable for map
         return rule;
     }
 
-    private final float dtUntilComputationInMS = 0.2f;
-    private volatile float[] lastCatalogedComputationTime = new float[] { 0.0f };
+    final Timer mouseMovementComputationLimiter = new Timer(0, new ActionListener() {
 
-    final Timer mouseMovementComputationLimiter = new Timer(0, e -> {
-        if (lastCatalogedComputationTime[0] <= 0.0f) {
+        private final float frequency = 0.2f;
+        private float lastCatalogedComputationTime = 0.0f;
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            if (System.currentTimeMillis() - lastCatalogedComputationTime > frequency) {
+
+            }
         }
     });
 

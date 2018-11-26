@@ -1,9 +1,12 @@
 package edu.dbgroup.logic.database;
 
 import org.davidmoten.rx.jdbc.annotations.Column;
+import org.davidmoten.rx.jdbc.annotations.Query;
 
 import java.sql.Timestamp;
 
+@Query("SELECT GovernmentData_ID, Log_ID, Temperature_ID, Precipitation_ID, WeatherType_ID, CreatedOn, UpdatedOn " +
+        "FROM GovernmentData")
 public interface GovernmentData {
 
     @Column("GovernmentData_ID")

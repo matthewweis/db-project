@@ -1,9 +1,11 @@
 package edu.dbgroup.logic.database;
 
 import org.davidmoten.rx.jdbc.annotations.Column;
+import org.davidmoten.rx.jdbc.annotations.Query;
 
 import java.sql.Timestamp;
 
+@Query("SELECT User_ID, FirstName, LastName, Username, CreatedOn, UpdatedOn FROM User")
 public interface User {
 
     @Column("User_ID")

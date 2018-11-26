@@ -1,6 +1,6 @@
 package edu.dbgroup.gui.components;
 
-import edu.dbgroup.logic.models.ServiceProvider;
+import edu.dbgroup.logic.ServiceProvider;
 import io.reactivex.Observable;
 import io.reactivex.rxjavafx.observables.JavaFxObservable;
 import io.reactivex.rxjavafx.sources.Change;
@@ -22,7 +22,7 @@ public class HomeView extends VBox {
     private final static Logger logger = LoggerFactory.getLogger(HomeView.class);
 
     private final Observable<Change<String>> countyChangedObservable =
-            JavaFxObservable.changesOf(ServiceProvider.INSTANCE.getKansasMapModel().selectedCountyProperty());
+            JavaFxObservable.changesOf(ServiceProvider.INSTANCE.MODELS.getKansasMapModel().selectedCountyProperty());
 
     @FXML
     private DatePicker datePicker;
@@ -40,11 +40,11 @@ public class HomeView extends VBox {
 
     private void initPropertyBindings() {
         countyTableRow.valueProperty()
-                .bind(ServiceProvider.INSTANCE.getKansasMapModel().selectedCountyProperty());
+                .bind(ServiceProvider.INSTANCE.MODELS.getKansasMapModel().selectedCountyProperty());
 
         dateTableRow.valueProperty()
-                .bind(ServiceProvider.INSTANCE.getHomeViewModel().selectedDateProperty().asString());
+                .bind(ServiceProvider.INSTANCE.MODELS.getHomeViewModel().selectedDateProperty().asString());
 
-        ServiceProvider.INSTANCE.getHomeViewModel().selectedDateProperty().bind(datePicker.valueProperty());
+        ServiceProvider.INSTANCE.MODELS.getHomeViewModel().selectedDateProperty().bind(datePicker.valueProperty());
     }
 }
