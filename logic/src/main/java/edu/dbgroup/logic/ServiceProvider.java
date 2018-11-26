@@ -1,5 +1,7 @@
 package edu.dbgroup.logic;
 
+import edu.dbgroup.logic.database.County;
+import edu.dbgroup.logic.database.GovernmentData;
 import edu.dbgroup.logic.models.Models;
 import edu.dbgroup.logic.queries.Queries;
 import io.reactivex.annotations.NonNull;
@@ -9,6 +11,7 @@ import org.davidmoten.rx.jdbc.pool.DatabaseType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;

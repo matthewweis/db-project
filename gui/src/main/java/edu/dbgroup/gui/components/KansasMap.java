@@ -62,7 +62,7 @@ public class KansasMap extends VBox { // todo make disposable for map
 
     private final static Logger logger = LoggerFactory.getLogger(KansasMap.class);
 
-    private final KansasMapModel kansasMapModel = ServiceProvider.INSTANCE.getKansasMapModel();
+    private final KansasMapModel kansasMapModel = ServiceProvider.INSTANCE.MODELS.getKansasMapModel();
 
     // START OF VARS FROM TUTORIAL
     private StyleFactory sf = CommonFactoryFinder.getStyleFactory();
@@ -110,7 +110,6 @@ public class KansasMap extends VBox { // todo make disposable for map
     //    private final Point2D worldCoords = new Point2D.Double(0, 0);
     private final Rectangle clickRectBox = new Rectangle(0, 0, 0, 0);
 
-    public KansasMap() { }
 
     @FXML
     private void initialize() {
@@ -163,13 +162,9 @@ public class KansasMap extends VBox { // todo make disposable for map
     }
 
     @Nullable private SimpleFeature lastSelectedFeature = null;
+
     private void attachEventHandlers() {
 
-        final SimpleFeatureTypeBuilder b = new SimpleFeatureTypeBuilder();
-        b.setName("highlighting");
-        b.setCRS(DefaultGeographicCRS.WGS84);
-
-        final GeometryFactory geometryFactory = JTSFactoryFinder.getGeometryFactory();
     }
 
     private Style createSelectedStyle(FeatureId IDs) {

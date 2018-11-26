@@ -6,6 +6,7 @@ import io.reactivex.rxjavafx.observables.JavaFxObservable;
 import io.reactivex.rxjavafx.sources.Change;
 import javafx.fxml.FXML;
 import javafx.scene.control.DatePicker;
+import javafx.scene.control.TableRow;
 import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,10 +29,10 @@ public class HomeView extends VBox {
     private DatePicker datePicker;
 
     @FXML
-    private TableRow countyTableRow;
+    private StringPropertyPair countyTablePropertyPair;
 
     @FXML
-    private TableRow dateTableRow;
+    private StringPropertyPair dateTablePropertyPair;
 
     @FXML
     private void initialize() {
@@ -39,12 +40,17 @@ public class HomeView extends VBox {
     }
 
     private void initPropertyBindings() {
-        countyTableRow.valueProperty()
-                .bind(ServiceProvider.INSTANCE.MODELS.getKansasMapModel().selectedCountyProperty());
 
-        dateTableRow.valueProperty()
+        countyTablePropertyPair.valProperty()
+            .bind(ServiceProvider.INSTANCE.MODELS.getKansasMapModel().selectedCountyProperty());
+
+        dateTablePropertyPair.valProperty()
                 .bind(ServiceProvider.INSTANCE.MODELS.getHomeViewModel().selectedDateProperty().asString());
 
         ServiceProvider.INSTANCE.MODELS.getHomeViewModel().selectedDateProperty().bind(datePicker.valueProperty());
+    }
+
+    private StringPropertyPair getPropertyOfRow(TableRow<StringPropertyPair> row) {
+        return row.getItem();
     }
 }

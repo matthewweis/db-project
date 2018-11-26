@@ -1,6 +1,6 @@
 package edu.dbgroup.logic.models;
 
-public class Models {
+public final class Models {
 
     private final HomeViewModel homeViewModel = new HomeViewModel();
     private final KansasMapModel kansasMapModel = new KansasMapModel();
