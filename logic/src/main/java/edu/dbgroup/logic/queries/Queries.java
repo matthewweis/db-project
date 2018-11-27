@@ -32,7 +32,7 @@ public final class Queries {
 
     static GovernmentData governmentDataOf(@NonNull Integer governmentDataID, @NonNull Integer logID,
                                            @NonNull Integer temperatureID, @NonNull Integer precipitationID,
-                                           @NonNull Integer weatherTypeID, @NonNull Timestamp createdOn,
+                                           /*@NonNull Integer weatherTypeID,*/ @NonNull Timestamp createdOn,
                                            @NonNull Timestamp updatedOn) {
         return new GovernmentData() {
             @Override
@@ -55,10 +55,10 @@ public final class Queries {
                 return precipitationID;
             }
 
-            @Override
-            public Integer weatherTypeID() {
-                return weatherTypeID;
-            }
+//            @Override
+//            public Integer weatherTypeID() {
+//                return weatherTypeID;
+//            }
 
             @Override
             public Timestamp createdOn() {

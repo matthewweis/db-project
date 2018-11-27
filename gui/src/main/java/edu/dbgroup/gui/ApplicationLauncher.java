@@ -1,11 +1,13 @@
 package edu.dbgroup.gui;
 
 import edu.dbgroup.gui.components.HomeView;
+import io.reactivex.annotations.NonNull;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import org.checkerframework.checker.initialization.qual.Initialized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,10 +20,12 @@ public class ApplicationLauncher extends Application {
 
     private final static Logger logger = LoggerFactory.getLogger(ApplicationLauncher.class);
 
+    @NonNull @Initialized
+    private HomeView homeView;
+
     @Override
     public void start(Stage stage) throws Exception {
-
-        final HomeView homeView = new HomeView();
+        homeView = new HomeView();
 
         final FXMLLoader loader =
                 new FXMLLoader(homeView.getClass().getResource("/edu/dbgroup/gui/components/home_view.fxml"));

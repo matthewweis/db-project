@@ -5,7 +5,7 @@ import org.davidmoten.rx.jdbc.annotations.Query;
 
 import java.sql.Timestamp;
 
-@Query("SELECT GovernmentData_ID, Log_ID, Temperature_ID, Precipitation_ID, WeatherType_ID, CreatedOn, UpdatedOn " +
+@Query("SELECT GovernmentData_ID, Log_ID, Temperature_ID, Precipitation_ID, "/*WeatherType_ID, */+"CreatedOn, UpdatedOn " +
         "FROM GovernmentData")
 public interface GovernmentData {
 
@@ -21,8 +21,8 @@ public interface GovernmentData {
     @Column("Precipitation_ID")
     Integer precipitationID();
 
-    @Column("WeatherType_ID") // may be incorrect in diagram, instead use GovernmentWeatherType table for 0..N link?
-    Integer weatherTypeID();
+//    @Column("WeatherType_ID") // may be incorrect in diagram, instead use GovernmentWeatherType table for 0..N link?
+//    Integer weatherTypeID();
 
     @Column("CreatedOn")
     Timestamp createdOn();

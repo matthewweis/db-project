@@ -16,14 +16,13 @@ public class KansasMapQueries {
         final Database database = ServiceProvider.INSTANCE.connectToDatabase();
 
         final Flowable<Log> logs =
-                database.select("SELECT Log_ID, County_ID, Date FROM Log WHERE Date == ?")
+                database.select("SELECT Log_ID, County_ID, Date FROM Log WHERE Date = ?")
                         .parameter(Date.valueOf(date))
                 .getAs(Integer.class, Integer.class, Date.class)
                 .map(tuple -> createLog(tuple.value1(), tuple.value2(), tuple.value3()));
 
         return logs.groupBy(
-
-                log -> database.select("SELECT County_ID, Name FROM County WHERE CountyID == ?")
+                log -> database.select("SELECT County_ID, Name FROM County WHERE County_ID = ?")
                 .parameter(log.countyID())
                 .dependsOn(logs)
                 .getAs(Integer.class, String.class)
@@ -32,20 +31,20 @@ public class KansasMapQueries {
                 .blockingGet(),
 
                 log -> database.select("SELECT GovernmentData_ID, Log_ID, Temperature_ID, Precipitation_ID, " +
-                "WeatherType_ID, CreatedOn, UpdatedOn FROM GovernmentData " +
-                "WHERE Log_ID == ?")
+                /*"WeatherType_ID,*/ "CreatedOn, UpdatedOn FROM GovernmentData " +
+                "WHERE Log_ID = ?")
                 .parameter(log.logID())
                 .dependsOn(logs)
-                .getAs(Integer.class, Integer.class, Integer.class, Integer.class,
+                .getAs(Integer.class, Integer.class, Integer.class,
                         Integer.class, Timestamp.class, Timestamp.class)
                 .map(tuple -> Queries.governmentDataOf(tuple.value1(), tuple.value2(),
-                        tuple.value3(), tuple.value4(), tuple.value5(), tuple.value6(), tuple.value7()))
+                        tuple.value3(), tuple.value4(), tuple.value5(), tuple.value6()))
 );
     }
 
     public Precipitation queryPrecipitation(GovernmentData govData) {
         return ServiceProvider.INSTANCE.connectToDatabase()
-                .select("SELECT Precipitation_ID, Water, Snow FROM Precipitation WHERE Precipitation_ID == ?")
+                .select("SELECT Precipitation_ID, Water, Snow FROM Precipitation WHERE Precipitation_ID = ?")
                 .parameter(govData.precipitationID())
                 .getAs(Integer.class, Double.class, Double.class)
                 .singleOrError()
@@ -55,7 +54,7 @@ public class KansasMapQueries {
 
     public Temperature queryTemperature(GovernmentData govData) {
         return ServiceProvider.INSTANCE.connectToDatabase()
-                .select("SELECT Temperature_ID, Average, High, Low FROM Temperature WHERE Temperature_ID == ?")
+                .select("SELECT Temperature_ID, Average, High, Low FROM Temperature WHERE Temperature_ID = ?")
                 .parameter(govData.temperatureID())
                 .getAs(Integer.class, Double.class, Double.class, Double.class)
                 .singleOrError()

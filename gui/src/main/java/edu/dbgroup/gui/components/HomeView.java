@@ -50,7 +50,6 @@ public class HomeView extends VBox {
         ServiceProvider.INSTANCE.MODELS.getHomeViewModel().selectedDateProperty().bind(datePicker.valueProperty());
     }
 
-    private StringPropertyPair getPropertyOfRow(TableRow<StringPropertyPair> row) {
-        return row.getItem();
-    }
+
+
 }
