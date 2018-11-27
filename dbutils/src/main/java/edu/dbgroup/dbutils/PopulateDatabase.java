@@ -371,6 +371,8 @@ public class PopulateDatabase {
                             new Coordinate(govData.longitude, govData.latitude), countyBorderDefs
                     ));
 
+
+
             final Flowable<Tuple2<Integer, GovDataRow>> flattenedGovData = govDataGroupedByCounty
                     .flatMap(grouped -> grouped.map(govDataRow -> Tuple2.create(grouped.getKey(), govDataRow)));
 
