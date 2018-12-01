@@ -1,41 +1,46 @@
 package edu.dbgroup.dbutils;
 
+import java.sql.Date;
 import com.github.davidmoten.guavamini.Preconditions;
+import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.Lists;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.ICSVParser;
 import com.opencsv.RFC4180Parser;
+import com.sun.tools.javac.comp.Flow;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.Point;
 import edu.dbgroup.logic.database.County;
+import io.reactivex.Completable;
 import io.reactivex.Flowable;
+import io.reactivex.Scheduler;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.flowables.GroupedFlowable;
-import org.davidmoten.rx.jdbc.Database;
+import io.reactivex.functions.Function3;
+import io.reactivex.schedulers.Schedulers;
+import org.davidmoten.rx.jdbc.*;
 import org.davidmoten.rx.jdbc.pool.DatabaseType;
 import org.davidmoten.rx.jdbc.tuple.Tuple2;
+import org.davidmoten.rx.jdbc.tuple.Tuple3;
 import org.geotools.data.FileDataStore;
-import org.geotools.data.FileDataStoreFinder;
 import org.geotools.data.collection.SpatialIndexFeatureCollection;
 import org.opengis.feature.simple.SimpleFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.sql.Date;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -62,14 +67,16 @@ public class PopulateDatabase {
         DATABASE_PROPERTIES.setProperty("DatabaseName", "TestDB");
         DATABASE_PROPERTIES.setProperty("user", "SA");
         DATABASE_PROPERTIES.setProperty("password", "Group_15");
+//        DATABASE_PROPERTIES.setProperty("rewriteBatchedStatements", "true");
     }
 
     // Durations should be in seconds or above
-    private final static Duration IDLE_TIME_BEFORE_HEALTH_CHECK = Duration.ofSeconds(5);
+    private final static Duration IDLE_TIME_BEFORE_HEALTH_CHECK = Duration.ofDays(2);
     private final static Duration MAX_IDLE_TIME = Duration.ofDays(2); // max time for any (batch) operation to run
     private final static Duration CONNECTION_RETRY_INTERVAL = Duration.ofDays(2); // must also be very high
 
-    private final static int MAX_POOL_SIZE = 8;
+    private final static int MAX_POOL_SIZE = 4;
+    private final static int MAX_BATCH_SIZE = 1000; // as per sqlserver specification
 
     /*
      * String to load driver for Microsoft sqlserver. This is only here as a contingency for legacy servers.
@@ -228,6 +235,35 @@ public class PopulateDatabase {
 //                    "CREATE INDEX [UK] ON  [User] ([Username]);";
 
     public static void main(String[] args) throws IOException {
+
+        boolean useNewMethod = true;
+
+        if (useNewMethod) {
+            run();
+            return;
+        }
+
+
+        final ImmutableBiMap<String, Integer> countyToIDMap = createCountyByNameMap();
+
+        final Flowable<File> files2 = Flowable.fromArray(
+                Objects.requireNonNull(
+                        new File(PopulateDatabase.class.getResource(
+                                "/edu/dbgroup/dbutils/weather-data-flat").getPath()).listFiles()
+                )
+        ).filter(file -> file.getName().endsWith(".csv"));
+        files2.blockingSubscribe(file -> {
+            final String[] colDefs = getFirstLine(file);
+            final int[] rowIndicesMapping = getRowIndicesMapping(colDefs);
+
+            System.out.println("County: " + file.getName() + " [ id = " +
+                    countyToIDMap.get(file.getName().substring(0, file.getName().length()-".csv".length())) + " ]");
+            System.out.println(" => " + Arrays.toString(colDefs));
+            System.out.println(" => " + Arrays.toString(rowIndicesMapping));
+        });
+
+        blockUntilUserTypesDelete();
+
         logger.info("Connecting to database...");
         try (final Database database = getDatabase()) {
 
@@ -241,17 +277,167 @@ public class PopulateDatabase {
             populateCountyTable(database);
 
             logger.info("Populating table: Log...");
-            populateLogTable(LocalDate.of(2018, 1, 1), LocalDate.of(2018, 7, 1), database);
+            populateLogTable(LocalDate.of(2004, 1, 1), LocalDate.of(2004, 1, 3), database);
 
             logger.info("Populating table GovernmentData...");
-            populateGovernmentDataTable(database);
+
+            final Flowable<File> files = Flowable.fromArray(
+                    Objects.requireNonNull(
+                            new File(PopulateDatabase.class.getResource(
+                                    "/edu/dbgroup/dbutils/weather-data-flat").getPath()).listFiles()
+                    )
+            ).filter(file -> file.getName().endsWith(".csv"));
+
+            files.blockingSubscribe(file -> {
+                logger.info(String.format(" => Populating GovernmentData with %s", file.getName()));
+
+                String countyName = file.getName().substring(0, file.getName().length()-".csv".length());
+                if (countyName.endsWith("20072018") || countyName.endsWith("20022018")) {
+                    countyName = countyName.substring(0, countyName.length() - "200_2018".length());
+                }
+
+                try {
+                    populateGovernmentDataTable(database, file, countyToIDMap.get(countyName));
+                } catch (Exception e) {
+                    logger.error(String.format("County %s threw and error and was not completed. %s", countyName), e);
+                }
+            }, Throwable::printStackTrace);
 
             logger.info("Closing database...");
         }
         logger.info("Success! Program will now exit.");
     }
-//
+
+    public static void run() throws IOException {
+
+        final ImmutableBiMap<Integer, String> countyMap = createCountyByNameMap().inverse();
+
+        blockUntilUserTypesDelete();
+
+        logger.info("Connecting to database...");
+        try (final Database db = getDatabase()) {
+
+            dropTables(db);
+            createTables(db);
+
+            final LocalDate startDate = LocalDate.of(2000, 1, 1);
+            final LocalDate endDateExclusive = LocalDate.of(2018, 1, 1);
+
+            final Flowable<Date> dates =
+                    Flowable.rangeLong(0L, ChronoUnit.DAYS.between(startDate, endDateExclusive))
+                            .map(daysSince -> Date.valueOf(startDate.plusDays(daysSince)));
+
+            final Flowable<Tuple2<Integer, Flowable<GovDataRow>>> govData = govDataRowFlowable(countyMap.inverse());
+
+
+            populateCountyTable(db);
+
+            db
+                    .select("SELECT County_ID FROM County")
+                    .transactedValuesOnly()
+                    .getAs(Integer.class)
+                    .onBackpressureBuffer()
+//                    .doOnEach(System.out::println)
+                    .doOnError(Throwable::printStackTrace)
+                    .subscribeOn(Schedulers.computation())
+                    .flatMap(tx -> tx.update("INSERT INTO GovernmentData VALUES(?,?,?)")
+                            .parameterListStream(Flowable.zip(
+
+                                    tx.update("INSERT INTO Log VALUES(?,?)")
+                                            .parameterListStream(dates.map(date -> list(tx.value(), date)))
+                                            .transactedValuesOnly()
+                                            .returnGeneratedKeys()
+                                            .getAs(Integer.class)
+                                            .onBackpressureBuffer()
+                                            .subscribeOn(Schedulers.computation())
+//                                            .doOnEach(System.out::println)
+                                            .doOnError(Throwable::printStackTrace),
+
+                                    tx.update("INSERT INTO Temperature VALUES(?,?,?)")
+                                            .parameterListStream(govData.flatMap(Tuple2::_2)
+                                                    .map(row -> list(row.tavg.orElse(null), row.tmin.orElse(null), row.tmax.orElse(null))))
+                                            .transactedValuesOnly()
+                                            .returnGeneratedKeys()
+                                            .getAs(Integer.class)
+                                            .onBackpressureBuffer()
+                                            .subscribeOn(Schedulers.computation())
+//                                            .doOnEach(System.out::println)
+                                            .doOnError(Throwable::printStackTrace),
+
+                                    tx.update("INSERT INTO Precipitation VALUES(?,?)")
+                                            .parameterListStream(govData.flatMap(Tuple2::_2)
+                                                    .map(row -> list(row.precipitation.orElse(null), row.snow.orElse(null))))
+                                            .transactedValuesOnly()
+                                            .returnGeneratedKeys()
+                                            .getAs(Integer.class)
+                                            .onBackpressureBuffer()
+                                            .subscribeOn(Schedulers.computation())
+//                                            .doOnEach(System.out::println)
+                                            .doOnError(Throwable::printStackTrace),
+
+                                    (a, b, c) -> list(a.value(), b.value(), c.value())
+
+                            ))
+                            .transactedValuesOnly()
+                            .returnGeneratedKeys()
+                            .getAs(Integer.class)
+                            .onBackpressureBuffer()
+                            .subscribeOn(Schedulers.computation())
+//                            .doOnEach(System.out::println)
+                            .doOnError(Throwable::printStackTrace))
+                    .blockingSubscribe(x -> {  }, Throwable::printStackTrace);
+        }
+    }
+
+    private static Flowable<String[]> countyGeocodeFlowable() throws FileNotFoundException {
+        return Flowable.fromIterable(new CSVReaderBuilder(new FileReader(PopulateDatabase.class.getResource(
+                    "/edu/dbgroup/dbutils/ks-county-geocodes.csv").getFile())).withCSVParser(getDataParser()).build());
+    }
+
+    private static Flowable<File> weatherDataFilesFlowable() {
+        return Flowable.fromArray(
+                Objects.requireNonNull(
+                        new File(PopulateDatabase.class.getResource(
+                                "/edu/dbgroup/dbutils/weather-data-flat").getPath()).listFiles()
+                )).filter(file -> file.getName().endsWith(".csv"));
+    }
+
+    private static Flowable<Tuple2<Integer, Flowable<GovDataRow>>> govDataRowFlowable(Map<String, Integer> countyMap) {
+        return weatherDataFilesFlowable()
+                .map(file -> Tuple2.create(
+                        countyMap.get(file.getName().substring(0, ".csv".length())),
+                        Flowable.fromIterable(getCSVReaderOfFile(file, 1)).map(row ->
+                                GovDataRow.createFromArray(
+                                        formatWeatherTypeStrings(getRowIndicesMapping(getFirstLine(file)), row)
+                                )
+                        ))
+                );
+    }
+
+    private static CSVReader getCSVReaderOfFile(File file, int skipLines) throws FileNotFoundException {
+        return new CSVReaderBuilder(new FileReader(file))
+                .withCSVParser(getDataParser())
+                .withSkipLines(skipLines)
+                .build();
+    }
+
+    private static void blockUntilUserTypesDelete() {
+        System.out.println("WARNING! This will delete any existing database. Type \"DELETE\" to continue.");
+
+        try (final Scanner scanner = new Scanner(System.in)) {
+            boolean confirmed = false;
+            while (!confirmed) {
+                confirmed = scanner.nextLine().equalsIgnoreCase("DELETE");
+            }
+            System.out.println();
+        }
+    }
+
     private static Database getDatabase() {
+        return createDatabase();
+    }
+
+    private static Database createDatabase() {
         return Database
                 .nonBlocking()
                 .url(DATABASE_URL)
@@ -292,12 +478,20 @@ public class PopulateDatabase {
                 .blockingSubscribe();
     }
 
+    private static UpdateBuilder dropTable2(String tableName, Database database) {
+        return database.update(String.format("DROP TABLE IF EXISTS %s", tableName));
+    }
+
     private static void createTable(String createString, Database database) {
         database.update(createString)
                 .counts()
                 .onBackpressureBuffer()
                 .doOnError(Throwable::printStackTrace)
                 .blockingSubscribe();
+    }
+
+    private static UpdateBuilder createTable2(String createString, Database database) {
+        return database.update(createString);
     }
 
     private static void populateCountyTable(Database database) throws FileNotFoundException {
@@ -323,102 +517,122 @@ public class PopulateDatabase {
 
     private static void populateLogTable(@NonNull LocalDate startDate, @NonNull LocalDate endDateExclusive,
                                          @NonNull Database database) {
-            // every day from startDate to endDate
-            final Flowable<Date> dates =
-                    Flowable.rangeLong(0L, ChronoUnit.DAYS.between(startDate, endDateExclusive))
-                            .map(daysSince -> Date.valueOf(startDate.plusDays(daysSince)));
+        // every day from startDate to endDate
+        final Flowable<Date> dates =
+                Flowable.rangeLong(0L, ChronoUnit.DAYS.between(startDate, endDateExclusive))
+                        .map(daysSince -> Date.valueOf(startDate.plusDays(daysSince)));
 
-            // every county in the county table
-            final Flowable<County> counties =
-                    database.select("SELECT County_ID, Name FROM County")
-                            .autoMap(County.class);
+        // every county in the county table
+        final Flowable<County> counties =
+                database.select("SELECT County_ID, Name FROM County")
+                        .autoMap(County.class);
 
-            // all possible pairs between dates and counties
-            final Flowable<List<?>> cartesianProduct =
-                    counties.flatMap(county -> dates.map(date -> Lists.newArrayList(county.countyID(), date)));
+        // all possible pairs between dates and counties
+        final Flowable<List<?>> cartesianProduct =
+                counties.flatMap(county -> dates.map(date -> Lists.newArrayList(county.countyID(), date)));
 
-            // insert all pairs as rows into Log table
-            database.update("INSERT INTO Log(County_ID, Date) VALUES(?, ?)")
-                    .parameterListStream(cartesianProduct)
-                    .counts()
-                    .onBackpressureBuffer()
-                    .doOnError(Throwable::printStackTrace)
-                    .blockingSubscribe();
+        // insert all pairs as rows into Log table
+        database.update("INSERT INTO Log(County_ID, Date) VALUES(?,?)")
+                .parameterListStream(cartesianProduct)
+                .batchSize(MAX_BATCH_SIZE)
+                .counts()
+                .onBackpressureBuffer()
+                .doOnError(Throwable::printStackTrace)
+                .blockingSubscribe();
     }
 
-    private static void populateGovernmentDataTable(Database database) throws IOException {
+    private static String[] getFirstLine(File file) throws IOException {
+        try (final CSVReader oneLineOnly =
+                new CSVReaderBuilder(new FileReader(file)).withCSVParser(getDataParser()).build()) {
+            return oneLineOnly.peek();
+        }
+    }
 
-            // load county border data
-            final FileDataStore countyBorderDefs = FileDataStoreFinder.getDataStore(
-                    PopulateDatabase.class.getResource("/edu/dbgroup/dbutils/data/counties/tl_2018_us_county.shp")
-            );
+    private static void populateGovernmentDataTable(Database database, File file, int countyID) throws IOException {
 
-            final CSVReaderBuilder builder = new CSVReaderBuilder(new FileReader(PopulateDatabase.class.getResource(
-                    "/edu/dbgroup/dbutils/1-1-2018_6-30-2018-ks.csv"
-            ).getFile()));
+        final String[] columns = getFirstLine(file);
 
-            builder.withCSVParser(getDataParser());
+        try(final CSVReader csvReader = new CSVReaderBuilder(new FileReader(file))
+                .withCSVParser(getDataParser())
+                .withSkipLines(1)
+                .build()) {
 
-            final CSVReader csvReader = builder.build();
+            final int[] rowIndiciesMapping = getRowIndicesMapping(columns);
 
             // all rows of data taken from the read csv file
             final Flowable<GovDataRow> governmentData =
-                    Flowable.fromIterable(csvReader).map(GovDataRow::createFromArray);
-
-            // sort gov data into groups based on their county which is determined by their latitude/longitude
-            final Flowable<GroupedFlowable<Integer, GovDataRow>> govDataGroupedByCounty =
-                    governmentData.groupBy(govData -> getCountyByCoordinate(
-                            new Coordinate(govData.longitude, govData.latitude), countyBorderDefs
-                    ));
+                    Flowable.fromIterable(csvReader).map(row ->
+                            GovDataRow.createFromArray(formatWeatherTypeStrings(rowIndiciesMapping, row))
+                    );
 
 
-
-            final Flowable<Tuple2<Integer, GovDataRow>> flattenedGovData = govDataGroupedByCounty
-                    .flatMap(grouped -> grouped.map(govDataRow -> Tuple2.create(grouped.getKey(), govDataRow)));
+            final Flowable<Tuple2<Integer, GovDataRow>> flattenedGovData =
+                    governmentData.map(govData -> Tuple2.create(countyID, govData));
 
             // Precipitation
             final Flowable<List<?>> flatPrecipitation =
                     flattenedGovData.map(pair -> list(pair.value2().precipitation, pair.value2().snow));
 
-            final Flowable<Integer> precipKeys = database.update("INSERT INTO Precipitation(Water, Snow) VALUES(?,?)")
+            final Flowable<Optional<Integer>> precipKeys = database.update("INSERT INTO Precipitation(Water, Snow) VALUES(?,?)")
                     .parameterListStream(flatPrecipitation)
                     .returnGeneratedKeys()
-                    .getAs(Integer.class);
+                    .getAsOptional(Integer.class);
 
 
             // Temperature
             final Flowable<List<?>> flatTemperature =
                     flattenedGovData.map(pair -> Lists.newArrayList(pair.value2().tavg, pair.value2().tmin, pair.value2().tmax));
 
-            final Flowable<Integer> tempKeys = database.update("INSERT INTO Temperature(Average, Low, High) VALUES(?,?,?)")
+            final Flowable<Optional<Integer>> tempKeys = database.update("INSERT INTO Temperature(Average, Low, High) VALUES(?,?,?)")
                     .parameterListStream(flatTemperature)
                     .returnGeneratedKeys()
-                    .getAs(Integer.class);
+                    .getAsOptional(Integer.class);
+
 
             // Weather todo
 
             final Flowable<List<?>> flatLog =
                     flattenedGovData.map(pair -> list(pair.value1(), pair.value2().date));
 
-            final Flowable<Integer> logKeys = database
+            final Flowable<Optional<Integer>> logKeys = database
                     .select("SELECT Log_ID FROM Log WHERE (County_ID = ?) AND (Date = ?)")
                     .parameterListStream(flatLog)
-                    .getAs(Integer.class);
+                    .getAsOptional(Integer.class);
 
             final Flowable<List<?>> zippedKeys = logKeys
                     .zipWith(tempKeys, Tuple2::create)
                     .zipWith(precipKeys, (pair, precip) -> list(pair.value1(), pair.value2(), precip));
 
+            zippedKeys.blockingForEach(x -> System.out.println(Arrays.toString(x.toArray())));
+
             database.update("INSERT INTO GovernmentData(Log_ID, Temperature_ID, Precipitation_ID) VALUES(?,?,?)")
                     .parameterListStream(zippedKeys)
+                    .batchSize(MAX_BATCH_SIZE)
                     .counts()
                     .onBackpressureBuffer()
                     .doOnError(Throwable::printStackTrace)
                     .blockingSubscribe();
+        }
     }
 
     private static ICSVParser getDataParser() {
         return new RFC4180Parser();
+    }
+
+    private static ImmutableBiMap<String, Integer> createCountyByNameMap() throws FileNotFoundException {
+        final ImmutableBiMap.Builder<String, Integer> builder = ImmutableBiMap.builder();
+
+        final CSVReader reader = new CSVReaderBuilder(new FileReader(PopulateDatabase.class.getResource(
+                "/edu/dbgroup/dbutils/ks-county-geocodes.csv"
+        ).getFile())).build();
+
+        Flowable.fromIterable(reader).blockingSubscribe(line -> {
+            final int geocode = Integer.parseInt(line[0]);
+            final String countyName = line[1];
+            builder.put(countyName, geocode);
+        });
+
+        return builder.build();
     }
 
     private static Integer getCountyByCoordinate(@NonNull Coordinate coordinate,
@@ -487,26 +701,106 @@ public class PopulateDatabase {
         return Lists.newArrayList(objects);
     }
 
+
+//    /**
+//     *
+//     * @param bits must not have a nonzero bit greater than 21
+//     * @return
+//     */
+//    private static String[] formatWeatherTypeStrings(int bits, @NonNull String[] values) {
+//        final int msb = 21;
+//        Preconditions.checkArgument(bits == (bits & (IntMath.pow(2, msb + 1) - 1)));
+//        final int offset = 10; // NOT ALWAYS TRUE
+//
+//
+//        final String[] strings = new String[msb];
+//
+//        int currVal = 0;
+//        for (int i=0; i < strings.length; i++) {
+//            if (i < offset) {
+//                strings[i] = values[i];
+//            } else {
+//                if ((bits | (1 << (i - offset))) == bits) {
+//                    strings[i] = values[offset + currVal++];
+//                } else {
+//                    strings[i] = null;
+//                }
+//            }
+//        }
+//
+//        return strings;
+//    }
+
+    private static String[] formatWeatherTypeStrings(int[] rowIndicesMapping, String[] values) {
+        Preconditions.checkArgument(rowIndicesMapping.length == values.length);
+        final String[] formattedStrings = new String[32];
+        for (int i=0; i < rowIndicesMapping.length; i++) {
+            formattedStrings[rowIndicesMapping[i]] = values[i];
+        }
+
+        return formattedStrings;
+    }
+
+    private static int[] getRowIndicesMapping(String[] columnDefs) {
+        final int[] mapping = new int[columnDefs.length];
+
+        final String[] possibleCols = new String[] {
+                "STATION", "LATITUDE", "LONGITUDE", "ELEVATION", "DATE", "PRCP", "SNOW", "TAVG", "TMAX", "TMIN"
+        };
+
+        for (int i=0; i < columnDefs.length; i++) {
+            boolean wasChanged = false;
+
+            for (int j=0; j < possibleCols.length; j++) {
+                if (columnDefs[i].equals(possibleCols[j])) {
+                    mapping[i] = j;
+                    wasChanged = true;
+                    break;
+                }
+            }
+
+            if (!wasChanged && columnDefs[i].startsWith("WT")) {
+                final int wt = Integer.parseInt(columnDefs[i].substring(2));
+                mapping[i] = possibleCols.length + wt - 1;
+            }
+        }
+
+        return mapping;
+    }
+
+
+
+    private static int getBitsFromWeatherTypeStrings(@NonNull String[] values) {
+        int bits = 0;
+        for (int i=0; i < values.length; i++) {
+            if (values[i].startsWith("WT")) {
+                final int val = Integer.parseInt(values[i].substring(2)) - 1; // minus one to be zero based
+                bits |= (1 << val);
+            }
+        }
+        return bits;
+    }
+
+
     /**
      * Helper class which stores a row of government data (from csv) as a class with all elements named.
      */
     private static class GovDataRow {
 
-        final String station, name, /*latitude, longitude,*/ elevation, /*date,*/ /*precipitation, snow, tavg, tmax, tmin,*/
-            wt01, wt02, wt03, wt04, wt05, wt06, wt07, wt08, wt09, wt11, wt15;
+        final String station, /*latitude, longitude,*/
+                elevation; /*date,*/ /*precipitation, snow, tavg, tmax, tmin,*/
+        //            wt01, wt02, wt03, wt04, wt05, wt06, wt07, wt08, wt09, wt11, wt15, wt16, wt17, wt18, wt19, wt20, wt21, wt22;
+        final String[] wts;
 
-        final Double latitude, longitude, precipitation, snow;
-        final Integer tavg, tmax, tmin;
+        final Optional<Double> latitude, longitude, precipitation, snow;
+        final Optional<Integer> tavg, tmax, tmin;
 
         final Date date;
 
-        GovDataRow(String station, String name, String latitude, String longitude, String elevation, String date,
-                          String precipitation, String snow, String tavg, String tmax, String tmin, String wt01,
-                          String wt02, String wt03, String wt04, String wt05, String wt06, String wt07, String wt08,
-                          String wt09, String wt11, String wt15) {
+        GovDataRow(String station, String latitude, String longitude, String elevation, String date,
+                   String precipitation, String snow, String tavg, String tmax, String tmin, String[] wts) {
 
             this.station = station;
-            this.name = name;
             this.latitude = parseDoubleOrReturnNull(latitude);
             this.longitude = parseDoubleOrReturnNull(longitude);
             this.elevation = elevation;
@@ -525,69 +819,42 @@ public class PopulateDatabase {
             this.tavg = parseIntegerOrReturnNull(tavg);
             this.tmax = parseIntegerOrReturnNull(tmax);
             this.tmin = parseIntegerOrReturnNull(tmin);
-            this.wt01 = wt01;
-            this.wt02 = wt02;
-            this.wt03 = wt03;
-            this.wt04 = wt04;
-            this.wt05 = wt05;
-            this.wt06 = wt06;
-            this.wt07 = wt07;
-            this.wt08 = wt08;
-            this.wt09 = wt09;
-            this.wt11 = wt11;
-            this.wt15 = wt15;
+
+            this.wts = wts;
         }
 
         @Nullable
-        Double parseDoubleOrReturnNull(String potentialDouble) {
+        Optional<Double> parseDoubleOrReturnNull(String potentialDouble) {
             try {
-                return Double.parseDouble(potentialDouble);
+                return Optional.of(Double.parseDouble(potentialDouble));
             } catch (Exception e) {
-                return null;
+                return Optional.empty();
             }
         }
 
         @Nullable
-        Integer parseIntegerOrReturnNull(String potentialDouble) {
+        Optional<Integer> parseIntegerOrReturnNull(String potentialDouble) {
             try {
-                return Integer.parseInt(potentialDouble);
+                return Optional.of(Integer.parseInt(potentialDouble));
             } catch (Exception e) {
-                return null;
+                return Optional.empty();
             }
         }
 
         static GovDataRow createFromArray(String[] strings) {
-//            try {
-//                Preconditions.checkArgument(strings.length == 22);
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//                System.err.println(strings.length + ", " + Arrays.toString(strings));
-//            }
+            Preconditions.checkArgument(strings.length == 32);
 
             return new GovDataRow(strings[0], strings[1], strings[2], strings[3],
                     strings[4], strings[5], strings[6], strings[7], strings[8],
-                    strings[9], strings[10], strings[11], strings[12], strings[13],
-                    strings[14], strings[15], strings[16], strings[17], strings[18],
-                    strings[19], strings[20], strings[21]);
+                    strings[9], Arrays.copyOfRange(strings, 10, strings.length));
         }
 
         @Override
         public String toString() {
             return "GovDataRow{" +
                     "station='" + station + '\'' +
-                    ", name='" + name + '\'' +
                     ", elevation='" + elevation + '\'' +
-                    ", wt01='" + wt01 + '\'' +
-                    ", wt02='" + wt02 + '\'' +
-                    ", wt03='" + wt03 + '\'' +
-                    ", wt04='" + wt04 + '\'' +
-                    ", wt05='" + wt05 + '\'' +
-                    ", wt06='" + wt06 + '\'' +
-                    ", wt07='" + wt07 + '\'' +
-                    ", wt08='" + wt08 + '\'' +
-                    ", wt09='" + wt09 + '\'' +
-                    ", wt11='" + wt11 + '\'' +
-                    ", wt15='" + wt15 + '\'' +
+                    ", wts=" + Arrays.toString(wts) +
                     ", latitude=" + latitude +
                     ", longitude=" + longitude +
                     ", precipitation=" + precipitation +

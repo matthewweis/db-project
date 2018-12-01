@@ -1,11 +1,13 @@
 package edu.dbgroup.logic.database;
 
+import io.reactivex.annotations.NonNull;
 import org.davidmoten.rx.jdbc.annotations.Column;
 import org.davidmoten.rx.jdbc.annotations.Query;
 
 @Query("SELECT County_ID, Name FROM County")
 public interface County {
 
+    @NonNull
     @Column("County_ID")
     Integer countyID();
 
@@ -16,6 +18,7 @@ public interface County {
 //    @Column("PhysioRegion_ID")
 //    Integer physioRegionID();
 
+    @NonNull
     @Column("Name")
     String name();
 
