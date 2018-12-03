@@ -7,9 +7,12 @@ import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PopupGraphView<X, Y> extends Stage {
 
+    private final static Logger logger = LoggerFactory.getLogger(PopupGraphView.class);
 
     public PopupGraphView(Axis<X> xAxis, Axis<Y> yAxis, String chartTitle, String name, XYChart.Series<X, Y> ... series) {
         setTitle(name);

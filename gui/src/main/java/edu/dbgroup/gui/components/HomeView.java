@@ -66,62 +66,63 @@ public class HomeView extends VBox {
 
     @FXML
     private void createPopupChart() {
-        final LocalDate start = LocalDate.of(2018, 1, 1);
-        final CategoryAxis x =
-                getAxisBetweenDates(start, start.plusWeeks(1), start.plusMonths(6), ChronoUnit.WEEKS);
-
-        final NumberAxis y = new NumberAxis(0.0, 110.0, 5.0);
-        final Random random = new Random();
-
-
-        final ObservableList<XYChart.Data<String, Number>> fakeData1 =
-                new ImmutableObservableList<XYChart.Data<String, Number>>(
-                Flowable.fromIterable(x.getCategories()).zipWith(
-                        Flowable.fromIterable(x.getCategories()).map(v -> random.nextDouble() * 110.0),
-                        XYChart.Data::new
-                ).toList().blockingGet().toArray(new XYChart.Data[0]));
-
-        final ObservableList<XYChart.Data<String, Number>> fakeData2 =
-                new ImmutableObservableList<XYChart.Data<String, Number>>(
-                        Flowable.fromIterable(x.getCategories()).zipWith(
-                                Flowable.fromIterable(x.getCategories()).map(v -> 10 + random.nextDouble() * 40.0),
-                                XYChart.Data::new
-                        ).toList().blockingGet().toArray(new XYChart.Data[0]));
-
-        final ObservableList<XYChart.Data<String, Number>> fakeData3 =
-                new ImmutableObservableList<XYChart.Data<String, Number>>(
-                        Flowable.fromIterable(x.getCategories()).zipWith(
-                                Flowable.fromIterable(x.getCategories()).map(v -> 20 + random.nextDouble() * 90.0),
-                                XYChart.Data::new
-                        ).toList().blockingGet().toArray(new XYChart.Data[0]));
-
-        XYChart.Series<String, Number> series1 = new XYChart.Series<String, Number>(fakeData1);
-        XYChart.Series<String, Number> series2 = new XYChart.Series<String, Number>(fakeData2);
-        XYChart.Series<String, Number> series3 = new XYChart.Series<String, Number>(fakeData3);
-
-        series1.setName("county1");
-        series2.setName("county2");
-        series3.setName("county3");
-
-        final PopupGraphView<String, Number> graph = new PopupGraphView<>(x, y, "test graph", "test window", series1,
-                series2, series3);
+        new GraphSetupForm();
+//        final LocalDate start = LocalDate.of(2018, 1, 1);
+//        final CategoryAxis x =
+//                getAxisBetweenDates(start, start.plusWeeks(1), start.plusMonths(6), ChronoUnit.WEEKS);
+//
+//        final NumberAxis y = new NumberAxis(0.0, 110.0, 5.0);
+//        final Random random = new Random();
+//
+//
+//        final ObservableList<XYChart.Data<String, Number>> fakeData1 =
+//                new ImmutableObservableList<XYChart.Data<String, Number>>(
+//                Flowable.fromIterable(x.getCategories()).zipWith(
+//                        Flowable.fromIterable(x.getCategories()).map(v -> random.nextDouble() * 110.0),
+//                        XYChart.Data::new
+//                ).toList().blockingGet().toArray(new XYChart.Data[0]));
+//
+//        final ObservableList<XYChart.Data<String, Number>> fakeData2 =
+//                new ImmutableObservableList<XYChart.Data<String, Number>>(
+//                        Flowable.fromIterable(x.getCategories()).zipWith(
+//                                Flowable.fromIterable(x.getCategories()).map(v -> 10 + random.nextDouble() * 40.0),
+//                                XYChart.Data::new
+//                        ).toList().blockingGet().toArray(new XYChart.Data[0]));
+//
+//        final ObservableList<XYChart.Data<String, Number>> fakeData3 =
+//                new ImmutableObservableList<XYChart.Data<String, Number>>(
+//                        Flowable.fromIterable(x.getCategories()).zipWith(
+//                                Flowable.fromIterable(x.getCategories()).map(v -> 20 + random.nextDouble() * 90.0),
+//                                XYChart.Data::new
+//                        ).toList().blockingGet().toArray(new XYChart.Data[0]));
+//
+//        XYChart.Series<String, Number> series1 = new XYChart.Series<String, Number>(fakeData1);
+//        XYChart.Series<String, Number> series2 = new XYChart.Series<String, Number>(fakeData2);
+//        XYChart.Series<String, Number> series3 = new XYChart.Series<String, Number>(fakeData3);
+//
+//        series1.setName("county1");
+//        series2.setName("county2");
+//        series3.setName("county3");
+//
+//        final PopupGraphView<String, Number> graph = new PopupGraphView<>(x, y, "test graph", "test window", series1,
+//                series2, series3);
     }
 
-    private CategoryAxis getAxisBetweenDates(LocalDate firstDate, LocalDate secondDate, LocalDate endDateExcl,
-                                             ChronoUnit units) {
-
-            final long stride = firstDate.until(secondDate, units);
-            final List<String> dates = Lists.newArrayList();
-
-            LocalDate dateIter = firstDate;
-            while (dateIter.isBefore(endDateExcl)) {
-                dates.add(dateIter.toString());
-                dateIter = dateIter.plus(stride, units);
-            }
-
-            ObservableList<String> observableList = new ImmutableObservableList<>(dates.toArray(new String[0]));
-            return new CategoryAxis(observableList);
-    }
+//    private CategoryAxis getAxisBetweenDates(LocalDate firstDate, LocalDate secondDate, LocalDate endDateExcl,
+//                                             ChronoUnit units) {
+//
+//            final long stride = firstDate.until(secondDate, units);
+//            final List<String> dates = Lists.newArrayList();
+//
+//            LocalDate dateIter = firstDate;
+//            while (dateIter.isBefore(endDateExcl)) {
+//                dates.add(dateIter.toString());
+//                dateIter = dateIter.plus(stride, units);
+//            }
+//
+//            ObservableList<String> observableList = new ImmutableObservableList<>(dates.toArray(new String[0]));
+//            return new CategoryAxis(observableList);
+//    }
 
     private CategoryAxis getTestDataBetweemDates(LocalDate firstDate, LocalDate secondDate, LocalDate endDateExcl,
                                              ChronoUnit units) {

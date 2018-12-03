@@ -18,16 +18,16 @@ public class KansasMapQueries {
         final Flowable<Log> logs =
                 database.select("SELECT Log_ID, County_ID, Date FROM Log WHERE Date = ?")
                         .parameter(Date.valueOf(date))
-                .getAs(Integer.class, Integer.class, Date.class)
-                .map(tuple -> createLog(tuple.value1(), tuple.value2(), tuple.value3()));
+                .getAs(Log.class);
+//                .map(tuple -> createLog(tuple.value1(), tuple.value2(), tuple.value3()));
 
         return logs.groupBy(
                 log -> database.select("SELECT County_ID, Name FROM County WHERE County_ID = ?")
                 .parameter(log.countyID())
                 .dependsOn(logs)
-                .getAs(Integer.class, String.class)
+                .getAs(County.class)
                 .singleOrError()
-                .map(tuple -> Queries.countyOf(tuple.value1(), tuple.value2()))
+//                .map(tuple -> Queries.countyOf(tuple.value1(), tuple.value2()))
                 .blockingGet(),
 
                 log -> database.select("SELECT GovernmentData_ID, Log_ID, Temperature_ID, Precipitation_ID, " +
@@ -35,14 +35,18 @@ public class KansasMapQueries {
                 "WHERE Log_ID = ?")
                 .parameter(log.logID())
                 .dependsOn(logs)
-                .getAs(Integer.class, Integer.class, Integer.class,
-                        Integer.class, Timestamp.class, Timestamp.class)
-                .map(tuple -> Queries.governmentDataOf(tuple.value1(), tuple.value2(),
-                        tuple.value3(), tuple.value4(), tuple.value5(), tuple.value6()))
-);
+                .autoMap(GovernmentData.class));
+//                .getAs(Integer.class, Integer.class, Integer.class,
+//                        Integer.class, Timestamp.class, Timestamp.class)
+//                .map(tuple -> Queries.governmentDataOf(tuple.value1(), tuple.value2(),
+//                        tuple.value3(), tuple.value4(), tuple.value5(), tuple.value6()))
+//);
     }
 
     public Precipitation queryPrecipitation(GovernmentData govData) {
+//        ServiceProvider.INSTANCE.connectToDatabase().apply(con -> {
+//            // call proc
+//        });
         return ServiceProvider.INSTANCE.connectToDatabase()
                 .select("SELECT Precipitation_ID, Water, Snow FROM Precipitation WHERE Precipitation_ID = ?")
                 .parameter(govData.precipitationID())
