@@ -1,6 +1,7 @@
 package edu.dbgroup.gui;
 
 import edu.dbgroup.gui.components.HomeView;
+import edu.dbgroup.logic.ServiceProvider;
 import io.reactivex.annotations.NonNull;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
@@ -10,6 +11,9 @@ import javafx.stage.Stage;
 import org.checkerframework.checker.initialization.qual.Initialized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.sql.Date;
+import java.time.LocalDate;
 
 /**
  * Launches the application by loading the {@link edu.dbgroup.gui.components.HomeView}'s fxml file located:
@@ -25,6 +29,18 @@ public class ApplicationLauncher extends Application {
 
     @Override
     public void start(Stage stage) throws Exception {
+
+        ServiceProvider.INSTANCE.QUERIES.getKansasMapQueries().averageAll(1,
+                Date.valueOf(LocalDate.of(2016, 1, 1)),
+                Date.valueOf(LocalDate.of(2016, 6, 1))
+        );
+
+        boolean quit = true;
+        if (quit) {
+            Thread.sleep(30000);
+            System.exit(0);
+        }
+
         homeView = new HomeView();
 
         final FXMLLoader loader =

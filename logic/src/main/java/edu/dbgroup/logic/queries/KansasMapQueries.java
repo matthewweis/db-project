@@ -6,11 +6,24 @@ import io.reactivex.Flowable;
 import io.reactivex.flowables.GroupedFlowable;
 import org.davidmoten.rx.jdbc.Database;
 
+import java.sql.CallableStatement;
 import java.sql.Date;
+import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 
 public class KansasMapQueries {
+
+    public Double averageAll(int county_ID, Date startDate, Date endDate) {
+        return ServiceProvider.INSTANCE.connectToDatabase().apply(connection -> {
+            CallableStatement stmt = connection.prepareCall("{call AveragesAll(?, ?, ?)}");
+            stmt.setInt(1, county_ID);
+            stmt.setDate(2, startDate);
+            stmt.setDate(3, endDate);
+            final ResultSet resultSet = stmt.executeQuery();
+            return resultSet.getDouble(1);
+        }).blockingGet();
+    }
 
     public Flowable<GroupedFlowable<County, Flowable<GovernmentData>>> queryGovernmentData(LocalDate date) {
         final Database database = ServiceProvider.INSTANCE.connectToDatabase();
@@ -64,25 +77,6 @@ public class KansasMapQueries {
                 .singleOrError()
                 .map(temp -> Queries.temperatureOf(temp.value1(), temp.value2(), temp.value3(), temp.value4()))
                 .blockingGet();
-    }
-
-    private Log createLog(int logID, int countyID, Date date) {
-        return new Log() {
-            @Override
-            public Integer logID() {
-                return logID;
-            }
-
-            @Override
-            public Integer countyID() {
-                return countyID;
-            }
-
-            @Override
-            public Date date() {
-                return date;
-            }
-        };
     }
 
 }

@@ -236,8 +236,9 @@ public class PopulateDatabase {
         boolean useNewMethod = true;
 
         if (useNewMethod) {
-            createFiles();
-            return;
+            return; // todo rm if generating is needed
+//            createFiles();
+//            return;
         }
 
 
