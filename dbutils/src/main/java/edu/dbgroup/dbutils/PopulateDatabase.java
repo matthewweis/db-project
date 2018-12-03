@@ -1,14 +1,15 @@
 package edu.dbgroup.dbutils;
 
+import java.io.*;
 import java.sql.Date;
 import com.github.davidmoten.guavamini.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.Lists;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.ICSVParser;
 import com.opencsv.RFC4180Parser;
-import com.sun.tools.javac.comp.Flow;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryFactory;
@@ -33,10 +34,6 @@ import org.opengis.feature.simple.SimpleFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -239,7 +236,7 @@ public class PopulateDatabase {
         boolean useNewMethod = true;
 
         if (useNewMethod) {
-            run();
+            createFiles();
             return;
         }
 
@@ -306,6 +303,119 @@ public class PopulateDatabase {
             logger.info("Closing database...");
         }
         logger.info("Success! Program will now exit.");
+    }
+
+    public static void createFiles() throws FileNotFoundException, UnsupportedEncodingException {
+        final ImmutableBiMap<String, Integer> countyMap = createCountyByNameMap();
+
+        final PrintWriter govDataWriter = new PrintWriter("govData.csv", "UTF-8");
+        final PrintWriter tempWriter = new PrintWriter("temperature.csv", "UTF-8");
+        final PrintWriter precipWriter = new PrintWriter("precipitation.csv", "UTF-8");
+        final PrintWriter weatherWriter = new PrintWriter("weather.csv", "UTF-8");
+
+        final Flowable<File> files = Flowable.fromArray(
+                Objects.requireNonNull(
+                        new File(PopulateDatabase.class.getResource(
+                                "/edu/dbgroup/dbutils/weather-data-flat").getPath()).listFiles()
+                )
+        ).filter(file -> file.getName().endsWith(".csv"));
+
+        { // first line
+            final List<String> precipRow =
+                    Lists.newArrayList("Precipitation_ID", "PRCP", "SNOW");
+
+            final List<String> tempRow =
+                    Lists.newArrayList("Temperature_ID", "TAVG", "TMAX", "TMIN");
+
+            final String[] wts = new String[22];
+            for (int i = 0; i < wts.length; i++) {
+                final int val = i + 1;
+                if (val < 10) {
+                    wts[i] = "WT0" + val;
+                } else {
+                    wts[i] = "WT" + val;
+                }
+            }
+
+            final List<String> weatherRow = Lists.asList("WeatherType_ID", wts);
+
+            final List<String> govDataRow =
+                    Lists.newArrayList("GovernmentData_ID", "Precipitation_ID", "Temperature_ID", "WeatherType_ID",
+                            "County_ID", "Date", "LATITUDE", "LONGITUDE", "Station", "Elevation");
+
+            precipWriter.println("\"" + String.join("\",\"", precipRow) + "\"");
+            tempWriter.println("\"" + String.join("\",\"", tempRow) + "\"");
+            weatherWriter.println("\"" + String.join("\",\"", weatherRow) + "\"");
+            govDataWriter.println("\"" + String.join("\",\"", govDataRow) + "\"");
+        }
+
+        files.forEach(file -> {
+            logger.info(String.format(" => Populating GovernmentData with %s", file.getName()));
+
+            String countyName = file.getName().substring(0, file.getName().length()-".csv".length());
+            if (countyName.endsWith("20072018") || countyName.endsWith("20022018")) {
+                countyName = countyName.substring(0, countyName.length() - "200_2018".length());
+            }
+
+            final int countyID = countyMap.get(countyName);
+
+            try(final CSVReader csvReader = new CSVReaderBuilder(new FileReader(file))
+                    .withCSVParser(getDataParser())
+                    .withSkipLines(1)
+                    .build()) {
+
+                final int[] rowIndiciesMapping = getRowIndicesMapping(getFirstLine(file));
+
+                csvReader.forEach(row -> {
+
+                    final GovDataRow govData =
+                            GovDataRow.createFromArray(formatWeatherTypeStrings(rowIndiciesMapping, row));
+
+                    final int UID = nextUID();
+
+                    final List<String> precipRow =
+                            Lists.newArrayList(Integer.toString(UID), getOrNull(govData.precipitation), getOrNull(govData.snow));
+
+                    final List<String> tempRow =
+                            Lists.newArrayList(Integer.toString(UID), getOrNull(govData.tavg), getOrNull(govData.tmax), getOrNull(govData.tmin));
+
+                    final List<String> weatherRow = Lists.asList(Integer.toString(UID), govData.wts);
+
+                    final List<String> govDataRow =
+                            Lists.newArrayList(Integer.toString(UID), Integer.toString(UID), Integer.toString(UID),
+                                    Integer.toString(UID), Integer.toString(countyID), govData.date.toString(),
+                                    getOrNull(govData.latitude), getOrNull(govData.longitude),
+                                    govData.station, govData.elevation);
+
+                    precipWriter.println("\"" + String.join("\",\"", precipRow) + "\"");
+                    tempWriter.println("\"" + String.join("\",\"", tempRow) + "\"");
+                    weatherWriter.println("\"" + String.join("\",\"", weatherRow) + "\"");
+                    govDataWriter.println("\"" + String.join("\",\"", govDataRow) + "\"");
+
+                });
+
+            }
+        });
+
+        weatherWriter.close();
+        precipWriter.close();
+        tempWriter.close();
+        govDataWriter.close();
+    }
+
+    static String getOrNull(Optional n) {
+        if (n.isPresent()) {
+            return n.get().toString();
+        } else {
+            return "";
+        }
+    }
+
+
+    static int _UID = 0;
+
+    static int nextUID() {
+        return _UID++;
     }
 
     public static void run() throws IOException {
@@ -843,6 +953,10 @@ public class PopulateDatabase {
 
         static GovDataRow createFromArray(String[] strings) {
             Preconditions.checkArgument(strings.length == 32);
+
+            for (int i=0; i < strings.length; i++) {
+                strings[i] = Strings.nullToEmpty(strings[i]);
+            }
 
             return new GovDataRow(strings[0], strings[1], strings[2], strings[3],
                     strings[4], strings[5], strings[6], strings[7], strings[8],

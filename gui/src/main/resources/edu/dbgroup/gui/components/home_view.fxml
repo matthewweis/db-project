@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import java.lang.*?>
+<?import javafx.collections.*?>
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.cell.*?>
 <?import javafx.collections.FXCollections?>
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.cell.PropertyValueFactory?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+
 <?import edu.dbgroup.gui.components.StringPropertyPair?>
 <VBox xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1" fx:controller="edu.dbgroup.gui.components.HomeView">
    <children>
       <BorderPane>
          <center>
-             <fx:include source="kansas_map.fxml" fx:id="kansasMap"/>
+             <fx:include fx:id="kansasMap" source="kansas_map.fxml" />
          </center>
          <bottom>
             <BorderPane BorderPane.alignment="BOTTOM_CENTER">
@@ -28,14 +33,14 @@
          <right>
             <TableView BorderPane.alignment="CENTER">
               <columns>
-                <TableColumn text="Property" >
+                <TableColumn text="Property">
                    <cellValueFactory>
-                      <PropertyValueFactory property="name"/>
+                      <PropertyValueFactory property="name" />
                    </cellValueFactory>
                 </TableColumn>
-                <TableColumn text="Value" prefWidth="200">
+                <TableColumn prefWidth="200" text="Value">
                    <cellValueFactory>
-                      <PropertyValueFactory property="val"/>
+                      <PropertyValueFactory property="val" />
                    </cellValueFactory>
                 </TableColumn>
               </columns>
@@ -47,6 +52,33 @@
                </items>
             </TableView>
          </right>
+         <top>
+            <MenuBar BorderPane.alignment="CENTER">
+              <menus>
+                <Menu mnemonicParsing="false" text="File">
+                  <items>
+                    <MenuItem mnemonicParsing="false" text="Close" />
+                        <MenuItem mnemonicParsing="false" text="Settings" />
+                  </items>
+                </Menu>
+                  <Menu mnemonicParsing="false" text="View">
+                      <items>
+                          <MenuItem mnemonicParsing="false" text="Chart..." onAction="#createPopupChart" />
+                      </items>
+                  </Menu>
+                <Menu mnemonicParsing="false" text="Insert">
+                  <items>
+                    <MenuItem mnemonicParsing="false" text="Data" />
+                  </items>
+                </Menu>
+                <Menu mnemonicParsing="false" text="Help">
+                  <items>
+                    <MenuItem mnemonicParsing="false" text="About" />
+                  </items>
+                </Menu>
+              </menus>
+            </MenuBar>
+         </top>
       </BorderPane>
    </children>
 </VBox>
