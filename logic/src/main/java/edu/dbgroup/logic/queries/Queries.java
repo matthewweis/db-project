@@ -112,5 +112,59 @@ public final class Queries {
         return null;
     }
 
+    public void insertData(int id, Date date, int countyID, double precip, double snowfall, int avgTemp, int highTemp, int lowTemp, String weatherType, String desc) {
+        final ResultSet rs = ServiceProvider.INSTANCE.connectToDatabase().apply(connection -> {
+            CallableStatement stmt = connection.prepareCall("{call InsertData(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)}");
+            stmt.setInt(1, id);
+            stmt.setDate(2, date);
+            stmt.setInt(3, countyID);
+            stmt.setDouble(4, precip);
+            stmt.setDouble(5, snowfall);
+            stmt.setInt(6, avgTemp);
+            stmt.setInt(7, highTemp);
+            stmt.setInt(8, lowTemp);
+            stmt.setString(9, weatherType);
+            stmt.setString(10, desc);
+
+            final ResultSet resultSet = stmt.executeQuery();
+            return resultSet;
+        }).blockingGet();
+    }
+
+    public int getUserId(String username) throws SQLException {
+        final ResultSet rs = ServiceProvider.INSTANCE.connectToDatabase().apply(connection -> {
+            CallableStatement stmt = connection.prepareCall("{call GetUserId(?)}");
+            stmt.setString(1, username);
+            final ResultSet resultSet = stmt.executeQuery();
+            return resultSet;
+        }).blockingGet();
+        while (rs.next()) {
+            final int ret = rs.getInt(1);
+            return ret;
+        }
+        return 0;
+    }
+
+    public String getWarnings(String county, Date start, Date end) throws SQLException {
+        final ResultSet rs = ServiceProvider.INSTANCE.connectToDatabase().apply(connection -> {
+            CallableStatement stmt = connection.prepareCall("{call SubmittedWarnings(?, ?, ?)}");
+            stmt.setString(1, county);
+            stmt.setDate(2, start);
+            stmt.setDate(3, end);
+            final ResultSet resultSet = stmt.executeQuery();
+            return resultSet;
+        }).blockingGet();
+        try {
+            while (rs.next()) {
+                final String ret = rs.getString(1);
+                return ret;
+            }
+        } catch (Exception e) {
+
+        }
+
+        return "";
+    }
+
 
 }

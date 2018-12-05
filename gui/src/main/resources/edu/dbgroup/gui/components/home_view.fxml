@@ -53,6 +53,7 @@
                       <StringPropertyPair name="AvgTemp" val="?" fx:id="avgTempTablePropertyPair"/>
                       <StringPropertyPair name="MaxTemp" val="?" fx:id="maxTempTablePropertyPair"/>
                       <StringPropertyPair name="MinTemp" val="?" fx:id="minTempTablePropertyPair"/>
+                      <StringPropertyPair name="Warning" val="?" fx:id="warningPropertyPair"/>
                   </FXCollections>
                </items>
             </TableView>
@@ -73,7 +74,7 @@
                   </Menu>
                 <Menu mnemonicParsing="false" text="Insert">
                   <items>
-                    <MenuItem mnemonicParsing="false" text="Data" />
+                    <MenuItem mnemonicParsing="false" text="Warning" onAction="#addUserWarning"/>
                   </items>
                 </Menu>
                 <Menu mnemonicParsing="false" text="Help">

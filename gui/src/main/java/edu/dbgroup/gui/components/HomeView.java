@@ -65,6 +65,9 @@ public class HomeView extends VBox {
     private StringPropertyPair minTempTablePropertyPair;
 
     @FXML
+    private StringPropertyPair warningPropertyPair;
+
+    @FXML
     private void initialize() {
         initPropertyBindings();
     }
@@ -106,7 +109,13 @@ public class HomeView extends VBox {
             ServiceProvider.INSTANCE.MODELS.getKansasMapModel().setAvgTemp(ret._3());
             ServiceProvider.INSTANCE.MODELS.getKansasMapModel().setMaxTemp(ret._4());
             ServiceProvider.INSTANCE.MODELS.getKansasMapModel().setMinTemp(ret._5());
+            warningPropertyPair.setVal(ServiceProvider.INSTANCE.QUERIES.getWarnings(change.getNewVal(), Date.valueOf(selectedDate), Date.valueOf(selectedDate.plusDays(1))));
         }, Throwable::printStackTrace);
+    }
+
+    @FXML
+    private void addUserWarning() {
+        new InsertForm();
     }
 
     @FXML
