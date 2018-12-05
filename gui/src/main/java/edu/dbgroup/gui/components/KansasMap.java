@@ -1,6 +1,7 @@
 package edu.dbgroup.gui.components;
 
 import com.google.common.base.Strings;
+import com.google.common.math.IntMath;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.MultiLineString;
 import com.vividsolutions.jts.geom.MultiPolygon;
@@ -24,6 +25,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.VBox;
 import org.checkerframework.checker.initialization.qual.Initialized;
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
+import org.davidmoten.rx.jdbc.tuple.Tuple2;
 import org.geotools.data.FileDataStore;
 import org.geotools.data.FileDataStoreFinder;
 import org.geotools.data.simple.SimpleFeatureIterator;
@@ -58,7 +60,9 @@ import java.awt.event.ActionListener;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
+import java.sql.Date;
 import java.util.Objects;
+import java.util.concurrent.Callable;
 
 /**
  * Certain aspects of this class (especially the coloring and picking) are adapted from a official geo-tools tutorial:
@@ -111,7 +115,7 @@ public class KansasMap extends VBox { // todo make disposable for map
     @Nullable @UnknownInitialization private String selectedGeomName;
 
     /** holds last selected county geometry enum, see {@link GeomType}, {@link #setGeometry()} */
-    @Nullable @UnknownInitialization private GeomType selectedGeomType = null;
+    @Nullable @UnknownInitialization private GeomType selectedGeomType = GeomType.POLYGON;
 
     // reusable coord objects
     private final Point2D localCoords = new Point2D.Double(0, 0);
@@ -132,7 +136,7 @@ public class KansasMap extends VBox { // todo make disposable for map
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-//        selectedGeomName = featureSource.getSchema().getGeometryDescriptor().getLocalName();
+        selectedGeomName = featureSource.getSchema().getGeometryDescriptor().getLocalName();
 
         map = new MapContent();
         renderer = new StreamingRenderer();
@@ -156,7 +160,7 @@ public class KansasMap extends VBox { // todo make disposable for map
     }
 
     public void draw(SimpleFeature highlightedFeature) {
-//        Style style;
+//        final Style style;
 //        if (highlightedFeature != null) {
 //            style = createSelectedStyle(highlightedFeature.getIdentifier());
 //        } else {
@@ -174,89 +178,69 @@ public class KansasMap extends VBox { // todo make disposable for map
 
     private void initPropertyBindings() {
         final GeometryDescriptor geomDesc = featureSource.getSchema().getGeometryDescriptor();
+//        final FeatureTypeStyle fts = sf.createFeatureTypeStyle();
 
         JavaFxObservable.changesOf(ServiceProvider.INSTANCE.MODELS.getHomeViewModel().selectedDateProperty())
                 .toFlowable(BackpressureStrategy.BUFFER)
                 .observeOn(Schedulers.io())
                 .map(Change::getNewVal)
-                .map(date -> ServiceProvider.INSTANCE.QUERIES.getKansasMapQueries().queryGovernmentData(date))
-//                .observeOn(Schedulers.computation())
-                .map(all -> {
-                    final FeatureTypeStyle fts = sf.createFeatureTypeStyle();
+                .flatMap(ldate -> ServiceProvider.INSTANCE.getCountiesAsFlowable().map(county -> Tuple2.create(ldate, county)))
+                .map(tuple -> Tuple2.create(tuple._2(), ServiceProvider.INSTANCE.QUERIES.averageAll(tuple._2(), Date.valueOf(tuple._1()), Date.valueOf(tuple._1().plusDays(1)))))
+                .buffer(105)
+                .map(list -> Flowable.fromIterable(list)
+                .reduceWith(() -> sf.createFeatureTypeStyle(), (fts, t2) -> {
 
-                    all.blockingSubscribe(countyFlow -> {
 
-                        final County county = countyFlow.getKey();
-                        System.out.println(county.countyID() + ", " + county.name());
+                    final String countyName = t2._1();
+                    final double rainFall = identityOrNullEquals0(t2._2()._1());
+                    final double snowFall = identityOrNullEquals0(t2._2()._2());
+                    final int avgTemp = identityOrNullEquals0(t2._2()._3());
+                    final int avgHiTemp = identityOrNullEquals0(t2._2()._4());
+                    final int avgLoTemp = identityOrNullEquals0(t2._2()._5());
+                    final int countyID = ServiceProvider.INSTANCE.getCountyIdByName(countyName);
 
-                        countyFlow.blockingSubscribe(stations -> {
-                            // todo use aggregation over this nightmare
-                            final double[] summingRain = new double[] { 0.0 };
-                            final double[] summingSnow = new double[] { 0.0 };
-                            final double[] summingAverage = new double[] { 0.0 };
-                            final double[] summingLow = new double[] { 0.0 };
-                            final double[] summingHigh = new double[] { 0.0 };
-                            final int[] counts = new int[] { 0, 0, 0, 0, 0 }; // counts of sR, sS, sA, sL, sH respectively
+//                    final Color color = new Color((float) Math.random(), (float) Math.random(), (float) Math.random());
+                    final int diff = Math.abs(avgHiTemp - avgLoTemp); // abs protects from incorrect data
+                    final int sum = avgHiTemp + avgLoTemp; // abs protects from incorrect data
+                    final float normalizedDiff = diff / (sum / 2.0f);
 
-                            stations.blockingSubscribe(govData -> {
-                                System.out.println("   -> log: " + govData.logID());
-                                final Precipitation precipitation =
-                                        ServiceProvider.INSTANCE.QUERIES.getKansasMapQueries().queryPrecipitation(govData);
+                    final Color mainColor;// = new Color((float) Math.random(), (float) Math.random(), (float) Math.random());
+                    if (normalizedDiff > 0) {
+                        mainColor = new Color(clamp0to1(normalizedDiff), clamp0to1(60.0f/255.0f), clamp0to1(1.0f - normalizedDiff));
+                    } else {
+                        mainColor = new Color((1.0f - normalizedDiff), normalizedDiff, 60.0f/255.0f);
+                    }
+                    final FeatureId featureId = ff.featureId(getFeatureIdOfCounty(countyID));
+                    final Color borderColor = Color.WHITE;
+//                    if (lastSelectedFeature.getIdentifier().equals(featureId)) {
+//                        borderColor = Color.YELLOW;
+//                    } else {
+//                        borderColor = Color.WHITE;
+//                    }
 
-                                final Temperature temperature =
-                                        ServiceProvider.INSTANCE.QUERIES.getKansasMapQueries().queryTemperature(govData);
+                    final Rule selectedRule = createRule(borderColor, mainColor, GeomType.POLYGON, geomDesc.getLocalName());
+                    logger.debug("mapped: " + countyID + " --> " + ff.id(featureId));
+                    selectedRule.setFilter(ff.id(featureId));
 
-                                if (Objects.nonNull(precipitation.water())) {
-                                    summingRain[0] += precipitation.water();
-                                    counts[0]++;
-                                }
-                                if (Objects.nonNull(precipitation.snow())) {
-                                    summingSnow[0] += precipitation.snow();
-                                    counts[1]++;
-                                }
-                                if (Objects.nonNull(temperature.average())) {
-                                    summingAverage[0] += temperature.average();
-                                    counts[2]++;
-                                }
-                                if (Objects.nonNull(temperature.high())) {
-                                    summingHigh[0] += temperature.high();
-                                    counts[3]++;
-                                }
-                                if (Objects.nonNull(temperature.low())) {
-                                    summingLow[0] += temperature.low();
-                                    counts[4]++;
-                                }
-                            }, Throwable::printStackTrace);
-
-                            // todo use values to create style for this county
-                            final Color color =
-                                    new Color((float) Math.random(), (float) Math.random(), (float) Math.random());
-
-                            final Rule selectedRule = createRule(color, color, GeomType.POLYGON, geomDesc.getLocalName());
-                            System.out.println(county.name() + " --> " + ff.id(ff.featureId(getFeatureIdOfCounty(county))));
-                            selectedRule.setFilter(ff.id(ff.featureId(getFeatureIdOfCounty(county))));
-
-                            synchronized (fts) {
-                                fts.rules().add(selectedRule);
-                            }
-                        }, Throwable::printStackTrace);
-
-                    }, Throwable::printStackTrace);
+                    fts.rules().add(selectedRule);
+                    return fts;
+                })
+                .observeOn(JavaFxScheduler.platform())
+                .subscribeOn(JavaFxScheduler.platform())
+                .subscribe(fts -> {
+                    System.out.println("here!");
 
                     // rule for anything not caught in previous rules (shouldn't occur?)
                     final Rule otherRule = createRule(LINE_COLOUR, FILL_COLOUR, GeomType.POLYGON, geomDesc.getLocalName());
                     otherRule.setElseFilter(true);
-                    synchronized (fts) {
-                        fts.rules().add(otherRule); // should only occur once per date change!
-                    }
+                    fts.rules().add(otherRule); // should only occur once per date change!
 
                     // add to style
                     final Style style = sf.createStyle();
                     style.featureTypeStyles().add(fts);
-                    return style;
-                })
-                .observeOn(JavaFxScheduler.platform())
-                .subscribe(this::setStyleAndRedraw, Throwable::printStackTrace);
+                    setStyleAndRedraw(style);
+        }, Throwable::printStackTrace)).subscribe();
+
     }
 
     private int identityOrNullEquals0(@Nullable Integer intValue) {
@@ -285,46 +269,38 @@ public class KansasMap extends VBox { // todo make disposable for map
         draw();
     }
 
-    private String getFeatureIdOfCounty(County county) throws IOException {
+    private String getFeatureIdOfCounty(int countyID) throws IOException {
         final String idPrefix = "tl_2018_us_county.";
-        final String featureId = String.format("%s%d", idPrefix, county.countyID());
-//        return new FeatureIdImpl(featureId);
-        return featureId;
-//        final SimpleFeatureIterator features = featureSource.getFeatures((Filter) ff.featureId(featureId)).features();
+        return String.format("%s%d", idPrefix, (countyID / 2) + (countyID % 2));
+    }
+
+//    private Style createSelectedStyle(FeatureId IDs) {
 //
-//        int count = 0;
-//        while (features.hasNext()) {
+//        Rule selectedRule = createRule(SELECTED_COLOR, SELECTED_COLOR);
+//        selectedRule.setFilter(ff.id(IDs));
 //
-//        }
-    }
-
-    private Style createSelectedStyle(FeatureId IDs) {
-
-        Rule selectedRule = createRule(SELECTED_COLOR, SELECTED_COLOR);
-        selectedRule.setFilter(ff.id(IDs));
-
-        Rule otherRule = createRule(LINE_COLOUR, FILL_COLOUR);
-        otherRule.setElseFilter(true);
-
-        FeatureTypeStyle fts = sf.createFeatureTypeStyle();
-        fts.rules().add(selectedRule);
-        fts.rules().add(otherRule);
-
-        Style style = sf.createStyle();
-        style.featureTypeStyles().add(fts);
-        return style;
-    }
-
-    private Style createDefaultStyle() {
-        Rule rule = createRule(LINE_COLOUR, FILL_COLOUR);
-
-        FeatureTypeStyle fts = sf.createFeatureTypeStyle();
-        fts.rules().add(rule);
-
-        Style style = sf.createStyle();
-        style.featureTypeStyles().add(fts);
-        return style;
-    }
+//        Rule otherRule = createRule(LINE_COLOUR, FILL_COLOUR);
+//        otherRule.setElseFilter(true);
+//
+//        FeatureTypeStyle fts = sf.createFeatureTypeStyle();
+//        fts.rules().add(selectedRule);
+//        fts.rules().add(otherRule);
+//
+//        Style style = sf.createStyle();
+//        style.featureTypeStyles().add(fts);
+//        return style;
+//    }
+//
+//    private Style createDefaultStyle() {
+//        Rule rule = createRule(LINE_COLOUR, FILL_COLOUR);
+//
+//        FeatureTypeStyle fts = sf.createFeatureTypeStyle();
+//        fts.rules().add(rule);
+//
+//        Style style = sf.createStyle();
+//        style.featureTypeStyles().add(fts);
+//        return style;
+//    }
 
     @Nullable
     private SimpleFeature clickIntersection(MouseEvent event) throws Exception {
@@ -495,6 +471,10 @@ public class KansasMap extends VBox { // todo make disposable for map
         } else {
             selectedGeomType = GeomType.POINT;
         }
+    }
+
+    private float clamp0to1(float f) {
+        return (float) Math.max(0.0, Math.min(1.0, f));
     }
 
 }

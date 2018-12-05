@@ -22,10 +22,10 @@
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
-      <module name="dbutils" target="8" />
-      <module name="fxapp" target="8" />
-      <module name="gui" target="8" />
-      <module name="logic" target="8" />
+      <module name="dbutils" target="1.8" />
+      <module name="fxapp" target="1.8" />
+      <module name="gui" target="1.8" />
+      <module name="logic" target="1.8" />
     </bytecodeTargetLevel>
   </component>
 </project>

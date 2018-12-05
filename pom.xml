@@ -17,8 +17,8 @@
 
     <properties>
         <!-- define language level as java 8 -->
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
 
         <!-- slf4j -->
         <slf4j.groupId>org.slf4j</slf4j.groupId>

@@ -30,17 +30,6 @@ public class ApplicationLauncher extends Application {
     @Override
     public void start(Stage stage) throws Exception {
 
-        ServiceProvider.INSTANCE.QUERIES.getKansasMapQueries().averageAll(1,
-                Date.valueOf(LocalDate.of(2016, 1, 1)),
-                Date.valueOf(LocalDate.of(2016, 6, 1))
-        );
-
-        boolean quit = true;
-        if (quit) {
-            Thread.sleep(30000);
-            System.exit(0);
-        }
-
         homeView = new HomeView();
 
         final FXMLLoader loader =

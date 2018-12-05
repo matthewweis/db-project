@@ -3,6 +3,7 @@ package edu.dbgroup.gui.components;
 import com.google.common.collect.Lists;
 import com.sun.javafx.collections.ImmutableObservableList;
 import com.sun.javafx.collections.ObservableListWrapper;
+import edu.dbgroup.logic.ServiceProvider;
 import io.reactivex.Flowable;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -25,6 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -68,7 +70,7 @@ public class GraphSetupForm extends Stage {
         final VBox vbox = new VBox();
 
         countyListSelectionView = new ListSelectionView<>();
-        countyListSelectionView.setSourceItems(new ObservableListWrapper<>(counties));
+        countyListSelectionView.setSourceItems(new ObservableListWrapper<>(new ArrayList<>(ServiceProvider.INSTANCE.getCountiesAsList())));
 
         vbox.getChildren().add(countyListSelectionView);
         vbox.getChildren().add(createSeperator());
@@ -197,18 +199,5 @@ public class GraphSetupForm extends Stage {
         ObservableList<String> observableList = new ImmutableObservableList<>(dates.toArray(new String[0]));
         return new CategoryAxis(observableList);
     }
-
-    private final List<String> counties = Lists.newArrayList("Allen", "Anderson", "Atchison", "Barber", "Barton",
-            "Bourbon", "Brown", "Butler", "Chase", "Chautauqua", "Cherokee", "Cheyenne", "Clark", "Clay", "Cloud",
-            "Coffey", "Comanche", "Cowley", "Crawford", "Decatur", "Dickinson", "Doniphan", "Douglas", "Edwards",
-            "Elk", "Ellis", "Ellsworth", "Finney", "Ford", "Fran klin", "Geary", "Gove", "Graham", "Grant", "Gray",
-            "Greeley", "Greenwood", "Hamilton", "Harper", "Harvey", "Haskell", "Hodgeman", "Jackson", "Jefferson",
-            " Jewell", "Johnson", "Kearny", "Kingman", "Kiowa", "Labette", "Lane", "Leavenworth", "Lincoln", "Linn",
-            "Logan", "Lyon", "McPherson", "Marion", "Marshall",
-            "Meade", "Miami", "Mitchell", "Montgomery", "Morris", "Morton", "Nemaha", "Neosho", "Ness", "Norton",
-            "Osage", "Osborne", "Ottawa", "Pawnee", "Phillips", " Pottawatomie", "Pratt", "Rawlins", "Reno",
-            "Republic", "Rice", "Riley", "Rooks", "Rush", "Russell", "Saline", "Scott", "Sedgwick", "Seward",
-            "Shawnee", "Sh eridan", "Sherman", "Smith", "Stafford", "Stanton", "Stevens", "Sumner", "Thomas",
-            "Trego", "Wabaunsee", "Wallace", "Washington", "Wichita", "Wilson", "Woo dson", "Wyandotte");
 
 }
