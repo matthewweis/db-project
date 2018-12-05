@@ -10,11 +10,28 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+
 public class PopupGraphView<X, Y> extends Stage {
 
     private final static Logger logger = LoggerFactory.getLogger(PopupGraphView.class);
 
-    public PopupGraphView(Axis<X> xAxis, Axis<Y> yAxis, String chartTitle, String name, XYChart.Series<X, Y> ... series) {
+//    public PopupGraphView(Axis<X> xAxis, Axis<Y> yAxis, String chartTitle, String name, XYChart.Series<X, Y> ... series) {
+//        setTitle(name);
+//
+//        final AreaChart<X, Y> areaChart = new AreaChart<>(xAxis, yAxis);
+//        areaChart.setTitle(chartTitle);
+//
+//        for (XYChart.Series<X, Y> xySeries : series) {
+//            areaChart.getData().add(xySeries);
+//        }
+//
+//        final Scene scene = new Scene(areaChart, 800, 600);
+//        setScene(scene);
+//        show();
+//    }
+
+    public PopupGraphView(Axis<X> xAxis, Axis<Y> yAxis, String chartTitle, String name, List<XYChart.Series<X, Y>> series) {
         setTitle(name);
 
         final AreaChart<X, Y> areaChart = new AreaChart<>(xAxis, yAxis);
@@ -24,8 +41,7 @@ public class PopupGraphView<X, Y> extends Stage {
             areaChart.getData().add(xySeries);
         }
 
-        final Scene scene = new Scene(areaChart, 800, 600);
-        setScene(scene);
+        setScene(new Scene(areaChart, 800, 600));
         show();
     }
 

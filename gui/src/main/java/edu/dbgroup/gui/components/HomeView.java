@@ -16,12 +16,13 @@ import javafx.scene.chart.XYChart;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.TableRow;
 import javafx.scene.layout.VBox;
+import org.davidmoten.rx.jdbc.tuple.Tuple5;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Date;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.Date;
 import java.util.List;
 import java.util.Random;
 
@@ -49,6 +50,21 @@ public class HomeView extends VBox {
     private StringPropertyPair dateTablePropertyPair;
 
     @FXML
+    private StringPropertyPair rainTablePropertyPair;
+
+    @FXML
+    private StringPropertyPair snowTablePropertyPair;
+
+    @FXML
+    private StringPropertyPair avgTempTablePropertyPair;
+
+    @FXML
+    private StringPropertyPair maxTempTablePropertyPair;
+
+    @FXML
+    private StringPropertyPair minTempTablePropertyPair;
+
+    @FXML
     private void initialize() {
         initPropertyBindings();
     }
@@ -61,7 +77,36 @@ public class HomeView extends VBox {
         dateTablePropertyPair.valProperty()
                 .bind(ServiceProvider.INSTANCE.MODELS.getHomeViewModel().selectedDateProperty().asString());
 
+        rainTablePropertyPair.valProperty()
+                .bind(ServiceProvider.INSTANCE.MODELS.getKansasMapModel().rainProperty().asString());
+
+        snowTablePropertyPair.valProperty()
+                .bind(ServiceProvider.INSTANCE.MODELS.getKansasMapModel().snowProperty().asString());
+
+        avgTempTablePropertyPair.valProperty()
+                .bind(ServiceProvider.INSTANCE.MODELS.getKansasMapModel().avgTempProperty().asString());
+
+        maxTempTablePropertyPair.valProperty()
+                .bind(ServiceProvider.INSTANCE.MODELS.getKansasMapModel().maxTempProperty().asString());
+
+        minTempTablePropertyPair.valProperty()
+                .bind(ServiceProvider.INSTANCE.MODELS.getKansasMapModel().minTempProperty().asString());
+
         ServiceProvider.INSTANCE.MODELS.getHomeViewModel().selectedDateProperty().bind(datePicker.valueProperty());
+
+
+        countyChangedObservable.subscribe(change -> {
+            final LocalDate selectedDate = ServiceProvider.INSTANCE.MODELS.getHomeViewModel().getSelectedDate();
+
+            Tuple5<Double, Double, Integer, Integer, Integer> ret = ServiceProvider.INSTANCE.QUERIES.averageAll(
+                    change.getNewVal(), Date.valueOf(selectedDate), Date.valueOf(selectedDate.plusDays(1)));
+
+            ServiceProvider.INSTANCE.MODELS.getKansasMapModel().setRain(ret._1());
+            ServiceProvider.INSTANCE.MODELS.getKansasMapModel().setSnow(ret._2());
+            ServiceProvider.INSTANCE.MODELS.getKansasMapModel().setAvgTemp(ret._3());
+            ServiceProvider.INSTANCE.MODELS.getKansasMapModel().setMaxTemp(ret._4());
+            ServiceProvider.INSTANCE.MODELS.getKansasMapModel().setMinTemp(ret._5());
+        }, Throwable::printStackTrace);
     }
 
     @FXML

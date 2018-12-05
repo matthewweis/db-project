@@ -447,7 +447,12 @@ public class KansasMap extends VBox { // todo make disposable for map
             draw(lastSelectedFeature);
 
             if (clickedOnFeature) {
-                kansasMapModel.setSelectedCounty(Strings.nullToEmpty(simpleFeature.getID()));
+                if (simpleFeature != null) {
+                    if (simpleFeature.getID() != null) {
+                        kansasMapModel.setSelectedCounty(Strings.nullToEmpty(simpleFeature.getAttribute(5).toString()));
+                    }
+                }
+
                 logger.info("selected " + simpleFeature.getID());
             }
 

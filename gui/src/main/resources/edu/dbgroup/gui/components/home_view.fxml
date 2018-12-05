@@ -48,6 +48,11 @@
                   <FXCollections fx:factory="observableArrayList">
                       <StringPropertyPair name="County" val="?" fx:id="countyTablePropertyPair"/>
                       <StringPropertyPair name="Date" val="?" fx:id="dateTablePropertyPair"/>
+                      <StringPropertyPair name="Rain" val="?" fx:id="rainTablePropertyPair"/>
+                      <StringPropertyPair name="Snow" val="?" fx:id="snowTablePropertyPair"/>
+                      <StringPropertyPair name="AvgTemp" val="?" fx:id="avgTempTablePropertyPair"/>
+                      <StringPropertyPair name="MaxTemp" val="?" fx:id="maxTempTablePropertyPair"/>
+                      <StringPropertyPair name="MinTemp" val="?" fx:id="minTempTablePropertyPair"/>
                   </FXCollections>
                </items>
             </TableView>

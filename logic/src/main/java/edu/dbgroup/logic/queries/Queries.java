@@ -50,6 +50,14 @@ public final class Queries {
         return null;
     }
 
+    /**
+     *
+     * @param countyName
+     * @param startDate
+     * @param endDate
+     * @return avg, lo, hi
+     * @throws SQLException
+     */
     public @Nullable
     Tuple3<Integer, Integer, Integer> averageTemp(String countyName, Date startDate, Date endDate) throws SQLException {
         final ResultSet rs = ServiceProvider.INSTANCE.connectToDatabase().apply(connection -> {
