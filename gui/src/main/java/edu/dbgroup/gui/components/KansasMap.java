@@ -1,6 +1,7 @@
 package edu.dbgroup.gui.components;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.math.IntMath;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.MultiLineString;
@@ -61,8 +62,11 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
 import java.sql.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
+import java.util.function.Supplier;
 
 /**
  * Certain aspects of this class (especially the coloring and picking) are adapted from a official geo-tools tutorial:
@@ -122,9 +126,21 @@ public class KansasMap extends VBox { // todo make disposable for map
     //    private final Point2D worldCoords = new Point2D.Double(0, 0);
     private final Rectangle clickRectBox = new Rectangle(0, 0, 0, 0);
 
+    private Map<Integer, Integer> colorMap = new HashMap<>();
 
     @FXML
     private void initialize() {
+        System.out.print("here");
+
+        for (int i=0; i < colors.size(); i+=2) {
+            colorMap.put(Integer.parseInt(colors.get(i)), Integer.parseInt(colors.get(i+1), 16));
+            colorMap.put(Integer.parseInt(colors.get(i)) + 1, Integer.parseInt(colors.get(i+1), 16));
+        }
+
+//        Flowable.fromIterable(colors).window(2).map(flow -> flow.take(2).toList().blockingGet())
+//                    .map(strings -> Lists.newArrayList())
+//                    .blockingForEach(list -> colorMap.put(Integer.parseInt((String)list.get(0)), Integer.parseInt((String)list.get(1), 16)));
+
         fxg2d = new FXGraphics2D(canvas.getGraphicsContext2D());
 
         try {
@@ -202,13 +218,26 @@ public class KansasMap extends VBox { // todo make disposable for map
 //                    final Color color = new Color((float) Math.random(), (float) Math.random(), (float) Math.random());
                     final int diff = Math.abs(avgHiTemp - avgLoTemp); // abs protects from incorrect data
                     final int sum = avgHiTemp + avgLoTemp; // abs protects from incorrect data
-                    final float normalizedDiff = diff / (sum / 2.0f);
+                    final float nd = (diff / (sum / 2.0f));
+                    final int mid = avgHiTemp; //avgLoTemp + (avgHiTemp - avgLoTemp);
 
                     final Color mainColor;// = new Color((float) Math.random(), (float) Math.random(), (float) Math.random());
-                    if (normalizedDiff > 0) {
-                        mainColor = new Color(clamp0to1(normalizedDiff), clamp0to1(60.0f/255.0f), clamp0to1(1.0f - normalizedDiff));
+                    if (nd > 0) {
+//                        final float r = Color.blue.getRed() * nd + Color.red.getRed() * (1.0f - nd);
+//                        final float g = Color.blue.getGreen() * nd + Color.red.getGreen() * (1.0f - nd);
+//                        final float b = Color.blue.getBlue() * nd + Color.red.getBlue() * (1.0f - nd);
+
+//                        mainColor = new Color(clamp0to1(nd), clamp0to1(0.0f/255.0f), clamp0to1(1.0f - nd));
+                        mainColor = getColorFromTemp(mid);
                     } else {
-                        mainColor = new Color((1.0f - normalizedDiff), normalizedDiff, 60.0f/255.0f);
+//                        final float r = Color.blue.getRed() * nd + Color.red.getRed() * (1 - nd);
+//                        final float g = Color.blue.getGreen() * nd + Color.red.getGreen() * (1 - nd);
+//                        final float b = Color.blue.getBlue() * nd + Color.red.getBlue() * (1 - nd);
+
+//                        mainColor = new Color(clamp0to1(nd), clamp0to1(0.0f/255.0f), clamp0to1(1.0f - nd));
+//                        mainColor = new Color(clamp0to1(r), clamp0to1(g), clamp0to1(b));
+//                        mainColor = new Color((1.0f - nd), nd, 60.0f/255.0f);
+                        mainColor = getColorFromTemp(mid);
                     }
                     final FeatureId featureId = ff.featureId(getFeatureIdOfCounty(countyID));
                     final Color borderColor = Color.WHITE;
@@ -481,5 +510,112 @@ public class KansasMap extends VBox { // todo make disposable for map
     private float clamp0to1(float f) {
         return (float) Math.max(0.0, Math.min(1.0, f));
     }
+
+    private Color getColorFromTemp(int temp) {
+        if (temp < 12) {
+            return getColorFromTemp(12);
+        } else if (temp > 190) {
+            return getColorFromTemp(190);
+        } else {
+            // 178 lines
+            int realColor = (temp / 2) * 2;
+            int ret = colorMap.getOrDefault(realColor, 0);
+            return new Color(ret);
+        }
+    }
+
+
+    private static java.util.List<String> colors = Lists.newArrayList(
+            "190", "FF0EF0",
+            "188", "FF0DF0",
+            "186", "FF0CF0",
+            "184", "FF0BF0",
+            "182", "FF0AF0",
+            "180", "FF09F0",
+            "178", "FF08F0",
+            "176", "FF07F0",
+            "174", "FF06F0",
+            "172", "FF05F0",
+            "170", "FF04F0",
+            "168", "FF03F0",
+            "166", "FF02F0",
+            "164", "FF01F0",
+            "162", "FF00F0",
+            "160", "FF00E0",
+            "158", "FF00D0",
+            "156", "FF00C0",
+            "154", "FF00B0",
+            "152", "FF00A0",
+            "150", "FF0090",
+            "148", "FF0080",
+            "146", "FF0070",
+            "144", "FF0060",
+            "142", "FF0050",
+            "140", "FF0040",
+            "138", "FF0030",
+            "136", "FF0020",
+            "134", "FF0010",
+            "132", "FF0000",
+            "130", "FF0a00",
+            "128", "FF1400",
+            "126", "FF1e00",
+            "124", "FF2800",
+            "122", "FF3200",
+            "120", "FF3c00",
+            "118", "FF4600",
+            "116", "FF5000",
+            "114", "FF5a00",
+            "112", "FF6400",
+            "110", "FF6e00",
+            "108", "FF7800",
+            "106", "FF8200",
+            "104", "FF8c00",
+            "102", "FF9600",
+            "100", "FFa000",
+            "98", "FFaa00",
+            "96", "FFb400",
+            "94", "FFbe00",
+            "92", "FFc800",
+            "90", "FFd200",
+            "88", "FFdc00",
+            "86", "FFe600",
+            "84", "FFf000",
+            "82", "FFfa00",
+            "80", "fdff00",
+            "78", "d7ff00",
+            "76", "b0ff00",
+            "74", "8aff00",
+            "72", "65ff00",
+            "70", "3eff00",
+            "68", "17ff00",
+            "66", "00ff10",
+            "64", "00ff36",
+            "62", "00ff5c",
+            "60", "00ff83",
+            "58", "00ffa8",
+            "56", "00ffd0",
+            "54", "00fff4",
+            "52", "00e4ff",
+            "50", "00d4ff",
+            "48", "00c4ff",
+            "46", "00b4ff",
+            "44", "00a4ff",
+            "42", "0094ff",
+            "40", "0084ff",
+            "38", "0074ff",
+            "36", "0064ff",
+            "34", "0054ff",
+            "32", "0044ff",
+            "30", "0032ff",
+            "28", "0022ff",
+            "26", "0012ff",
+            "24", "0002ff",
+            "22", "0000ff",
+            "20", "0100ff",
+            "18", "0200ff",
+            "16", "0300ff",
+            "14", "0400ff",
+            "12", "0500ff"
+    );
 
 }

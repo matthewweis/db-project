@@ -72,8 +72,8 @@ public enum ServiceProvider {
 
     @NonNull
     public final Database connectToDatabase() {
-//        System.out.println(java.lang.System.getProperty("java.library.path"));
         if (database == null) {
+            System.out.println(java.lang.System.getProperty("java.library.path"));
 
 //                Class.forName(JDBC_DRIVER);
 //            try {

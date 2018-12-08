@@ -142,7 +142,7 @@ public final class Queries {
             final int ret = rs.getInt(1);
             return ret;
         }
-        return 0;
+        return -1;
     }
 
     public String getWarnings(String county, Date start, Date end) throws SQLException {
