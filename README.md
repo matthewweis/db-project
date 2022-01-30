@@ -2,6 +2,12 @@
 
 Weather map of Kansas counties which displays government data alongside supplemental data entered by users.
 
+## Sample Images
+
+![](docs/image10.png)
+![](docs/image5.png)
+![](docs/image2.png)
+
 ## Getting Started
 
 This project exists in two main parts: the database and the application. This github repo contains all code for the application. The database may be run in multiple ways, but instructions for running a database with Docker are included within logic/src/test/java/edu/dbgroup/logic/DBConnectionTest.java.
